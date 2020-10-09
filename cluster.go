@@ -5,7 +5,7 @@ import "time"
 import "math/rand"
 
 const ClusterSize = 8
-const ElectionTimeOut = 1000
+const ElectionTimeOut = 2 * 1000 // in milliseconds
 
 type Vote struct {
 	Term int
@@ -13,10 +13,10 @@ type Vote struct {
 	Responses chan bool
 }
 
-
 func initCluster(done chan bool) {
 
 	var voteChannels [ClusterSize]chan Vote
+	var leaderCommunicationChannel [ClusterSize] chan LogEntry
 
 	// Spawn 8 nodes (all followers to start)
 	for i := 0; i < ClusterSize; i++ {
@@ -24,29 +24,63 @@ func initCluster(done chan bool) {
 		state := ServerState{i, 0, -1, []LogEntry{}}
 
 		voteChannels[i] = make(chan Vote)
+		leaderCommunicationChannel[i] = make(chan LogEntry)
 
-		go startServer(state, &voteChannels, done)
+		go startServer(state, &voteChannels, &leaderCommunicationChannel, done)
 	}
 }
 
+/* Creates a server in the cluster. Structured via https://pdos.csail.mit.edu/6.824/labs/raft-structure.txt
+ *
+ */
+func startServer(
+	state ServerState,
+	voteChannels *[ClusterSize]chan Vote,
+	leaderCommunicationChannels *[ClusterSize]chan LogEntry,
+	done chan bool,
+) {
+	electionThreadSleepTime := time.Millisecond * 50
+	timeSinceLastUpdate := time.Now() //update includes election or message from leader
 
-func startServer(state ServerState, voteChannels *[ClusterSize]chan Vote, done chan bool) {
-	//start election timer
-	electionTime := time.NewTimer(time.Duration(ElectionTimeOut) * time.Millisecond)
+	/* Election Timer: Checks if timeout is surpassed and starts election. Timeout is reached when:
+	 * 1. no message from leader or
+	 * 2. when election took too long (e.g. due to tie / no leader elected)
+	 */
+	go func () {
+		for {
+			timeElapsed := time.Now().Sub(timeSinceLastUpdate)
+			if timeElapsed.Milliseconds() > ElectionTimeOut {
+				timeSinceLastUpdate = time.Now()
+				go elect(state, voteChannels, leaderCommunicationChannels)
+			}
+			time.Sleep(electionThreadSleepTime)
+		}
+	}()
 
-	elect(state, voteChannels, electionTime)
-	
-	done <- true
+	// receive messages from leader
+	go func () {
+		for newLogEntry := range leaderCommunicationChannels[state.ServerId] {
+			timeSinceLastUpdate = time.Now()
+			fmt.Print("New log entry received from leader:", newLogEntry, "\n")
+			//process log entry here
+		}
+		done <- true
+	}()
 }
 
-
-func elect(state ServerState, voteChannels *[ClusterSize]chan Vote, electionTime *time.Timer) {
-	startTimeOut := rand.Intn(150) + 150
-
-	startTime := time.NewTimer(time.Duration(startTimeOut) * time.Millisecond)
+/* Begins an election.
+ *
+ */
+func elect(
+	state ServerState,
+	voteChannels *[ClusterSize]chan Vote,
+	leaderCommunicationChannels *[ClusterSize]chan LogEntry,
+	) {
+	timeUntilElectionStart := rand.Intn(150) + 150
+	electionStartTimer := time.NewTimer(time.Duration(timeUntilElectionStart) * time.Millisecond)
 
 	select {
-	case <-startTime.C: // candidate
+	case <-electionStartTimer.C: // candidate
 		fmt.Println("Server ", state.ServerId, " is a candidate")
 		// start election
 		state.CurrentTerm++
@@ -54,18 +88,18 @@ func elect(state ServerState, voteChannels *[ClusterSize]chan Vote, electionTime
 		// vote for self
 		state.VotedFor = state.ServerId
 		
-		// reset election timer
-		electionTime.Reset(time.Duration(ElectionTimeOut) * time.Millisecond)
-		
 		//count votes
 		winnerChannel := make(chan bool)
 		go requestVotes(state, voteChannels, winnerChannel)
 		
 		select {
 		case <-winnerChannel: // got enough votes
-			// start sending heartbeats (blank appendentries)
-		case <-electionTime.C: // election timed out
-			// restart election
+			for serverIndex, leaderCommunicationChannel := range leaderCommunicationChannels {
+				leaderCommunicationChannel := leaderCommunicationChannel
+				go func () {
+					leaderCommunicationChannel <- LogEntry{serverIndex, state.CurrentTerm, KeyValue{"assert", "dominance"}}
+				}()
+			}
 		}
 		
 	case v := <-(*voteChannels)[state.ServerId]: // follower
