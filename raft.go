@@ -2,9 +2,7 @@
 
 package main
 
-import (
-	"fmt"
-)
+import "fmt"
 
 func main() {
 	// 1. Make client to cluster channel (KeyValue to store on system)
@@ -13,6 +11,14 @@ func main() {
 	//      new term) so the client needs to resend it
 
 	// 2. Spawn cluster
+	done := make(chan bool)
+	initCluster(done)
+
+	for i := 0; i < ClusterSize; i++ {
+		<-done
+	}
+
+	fmt.Println("all done")
 
 	// 3. Send Key Value pairs to cluster
 }

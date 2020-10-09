@@ -1,41 +1,96 @@
 // cluster.go
 
+package main
+
+import "fmt"
+import "time"
+import "math/rand"
+
 const ClusterSize = 8
+const ElectionTimeOut = 1000
 
-// Spawn 8 nodes (all followers to start)
-func initCluster() {
+type Vote struct {
+	Term int
+	VoteFor int
+	Responses chan bool
+}
 
-	// We gotta figure out how we want to use channels
-	// rn here's what I'm thinkin:
-	//     1. Election channel (int of ServerId to vote for)
-	//         - might need an ack channel so we can check if a majority voted
-	//           for a node and we can officially mark it as the leader
-	//         - might need map of channels (one per follower)
-	//     2. Append to log channel (LogEntry sent from leader to followers)
-	//         - might need an ack channel so we can check if a majority acked
-	//           the value and we should mark it as committed
-	//         - might need map of channels (one per follower)
 
+func initCluster(done chan bool) {
+
+	var voteChannels [ClusterSize]chan Vote
+
+	// Spawn 8 nodes (all followers to start)
 	for i := 0; i < ClusterSize; i++ {
-		// Maybe we make a couple channel maps here and pass them to each node 
-		// so that if it becomes the leader it can communicate with each
-		// follower separately.  Just a thought, we've got a lot to discuss
-		go func() {
-			state := ServerState{i, -1, []LogEntry}
+		// initialize state as followers
+		state := ServerState{i, 0, -1, []LogEntry{}}
 
-			// random timeout
+		voteChannels[i] = make(chan Vote)
 
-			// wait for vote requests
-
-			// if request not recieved, requestVote()
-
-
-		}
+		go startServer(state, &voteChannels, done)
 	}
 }
 
-// Send a vote request and vote for yourself
-func requestVote() {
-    
+
+func startServer(state ServerState, voteChannels *[ClusterSize]chan Vote, done chan bool) {
+	//start election timer
+	electionTime := time.NewTimer(time.Duration(ElectionTimeOut) * time.Millisecond)
+
+	elect(state, voteChannels, electionTime)
+	
+	done <- true
 }
 
+
+func elect(state ServerState, voteChannels *[ClusterSize]chan Vote, electionTime *time.Timer) {
+	startTimeOut := rand.Intn(150) + 150
+
+	startTime := time.NewTimer(time.Duration(startTimeOut) * time.Millisecond)
+
+	select {
+	case <-startTime.C: // candidate
+		fmt.Println("Server ", state.ServerId, " is a candidate")
+		// start election
+		state.CurrentTerm++
+
+		// vote for self
+		state.VotedFor = state.ServerId
+		
+		// reset election timer
+		electionTime.Reset(time.Duration(ElectionTimeOut) * time.Millisecond)
+		
+		// send vote requests to other servers
+		responses := make(chan bool)
+		for i, c := range (*voteChannels) {
+			if i != state.ServerId {
+				c <- Vote{state.CurrentTerm, state.ServerId, responses}
+			}
+		}
+		
+		// count votes
+		votes := 0
+		for j := 0; j < (ClusterSize - 1); j++ {
+			r := <-responses
+			if r {
+				votes++
+			}
+		}
+
+		fmt.Println("Server ", state.ServerId, " received ", votes, " votes")
+		if votes >= ClusterSize/2 { // won election
+			fmt.Println("Server ", state.ServerId, " is the leader!")
+		} else { // lost election
+			fmt.Println("Server ", state.ServerId, " didn't get enough votes :(")
+		}
+	case v := <-(*voteChannels)[state.ServerId]: // follower
+		if v.Term > state.CurrentTerm { // I haven't voted yet
+			state.CurrentTerm = v.Term
+			state.VotedFor = v.VoteFor
+			v.Responses <- true
+			fmt.Println("Server ", state.ServerId, " voted for ", state.VotedFor)
+		} else { // I already voted
+			v.Responses <- false
+			fmt.Println("Server ", state.ServerId, " didn't vote for ", v.VoteFor, " because it already voted in term ", v.Term)
+		}
+	}
+}

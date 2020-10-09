@@ -1,5 +1,7 @@
 // types.go
 
+package main
+
 // KeyValues are sent from the client
 // to the cluster for storage.  
 type KeyValue struct {
@@ -16,9 +18,10 @@ type LogEntry struct {
 }
 
 // ServerStates store the id, log, and
-// status of a server (leader or follower)
+// status of a server (leader, follower, or candidate)
 type ServerState struct {
 	ServerId int
-	Leader int // ServerId of leader
+	CurrentTerm int
+	VotedFor int
 	Log []LogEntry
 }
