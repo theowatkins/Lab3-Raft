@@ -59,29 +59,17 @@ func elect(state ServerState, voteChannels *[ClusterSize]chan Vote, electionTime
 		// reset election timer
 		electionTime.Reset(time.Duration(ElectionTimeOut) * time.Millisecond)
 		
-		// send vote requests to other servers
-		responses := make(chan bool)
-		for i, c := range (*voteChannels) {
-			if i != state.ServerId {
-				c <- Vote{state.CurrentTerm, state.ServerId, responses}
-			}
+		//count votes
+		winnerChannel := make(chan bool)
+		go requestVotes(state, voteChannels, winnerChannel)
+		
+		select {
+		case <-winnerChannel: // got enough votes
+			// start sending heartbeats (blank appendentries)
+		case <-electionTime.C: // election timed out
+			// restart election
 		}
 		
-		// count votes
-		votes := 0
-		for j := 0; j < (ClusterSize - 1); j++ {
-			r := <-responses
-			if r {
-				votes++
-			}
-		}
-
-		fmt.Println("Server ", state.ServerId, " received ", votes, " votes")
-		if votes >= ClusterSize/2 { // won election
-			fmt.Println("Server ", state.ServerId, " is the leader!")
-		} else { // lost election
-			fmt.Println("Server ", state.ServerId, " didn't get enough votes :(")
-		}
 	case v := <-(*voteChannels)[state.ServerId]: // follower
 		if v.Term > state.CurrentTerm { // I haven't voted yet
 			state.CurrentTerm = v.Term
@@ -92,5 +80,30 @@ func elect(state ServerState, voteChannels *[ClusterSize]chan Vote, electionTime
 			v.Responses <- false
 			fmt.Println("Server ", state.ServerId, " didn't vote for ", v.VoteFor, " because it already voted in term ", v.Term)
 		}
+	}
+}
+
+func requestVotes(state ServerState, voteChannels *[ClusterSize]chan Vote, winnerChannel chan bool) {
+	// send vote requests to other servers
+	responses := make(chan bool)
+	for i, c := range (*voteChannels) {
+		if i != state.ServerId {
+			c <- Vote{state.CurrentTerm, state.ServerId, responses}
+		}
+	}
+	
+	// count votes
+	votes := 0
+	for j := 0; j < (ClusterSize - 1); j++ {
+		r := <-responses
+		if r {
+			votes++
+		}
+	}
+
+	fmt.Println("Server ", state.ServerId, " received ", votes, " votes")
+	if votes >= ClusterSize/2 { // won election
+		fmt.Println("Server ", state.ServerId, " is the leader!")
+		winnerChannel <- true
 	}
 }
