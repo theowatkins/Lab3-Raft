@@ -1,5 +1,3 @@
-// cluster.go
-
 package main
 
 import "fmt"

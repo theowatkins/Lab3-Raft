@@ -1,5 +1,3 @@
-// types.go
-
 package main
 
 // KeyValues are sent from the client
