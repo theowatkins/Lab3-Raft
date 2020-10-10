@@ -101,15 +101,19 @@ func startServer(
 			serverStateLock.Lock()
 			state.Role = LeaderRole
 			serverStateLock.Unlock()
-			for state.Role == LeaderRole {
-				for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
-					leaderCommunicationChannel <- LogEntry{serverIndex, state.CurrentTerm, KeyValue{"", ""}}
-				}
-				fmt.Println() //breaks up prints into chunks for each beat.
-				time.Sleep(HeartBeatDelay * time.Millisecond)
-			}
+			runHeartbeatThread(&state, leaderCommunicationChannels)
 		}
 	}()
+}
+
+func runHeartbeatThread(state * ServerState, leaderCommunicationChannels *[ClusterSize]chan LogEntry) {
+	for state.Role == LeaderRole {
+		for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
+			leaderCommunicationChannel <- LogEntry{serverIndex, state.CurrentTerm, KeyValue{"", ""}}
+		}
+		fmt.Println() //breaks up prints into chunks for each beat.
+		time.Sleep(HeartBeatDelay * time.Millisecond)
+	}
 }
 
 func printMessageFromLeader(id int, logEntry LogEntry){
