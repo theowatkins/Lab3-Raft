@@ -15,11 +15,18 @@ type LogEntry struct {
     Content KeyValue
 }
 
+type ServerRole string
+const LeaderRole ServerRole = "LeaderRole"
+const FollowerRole ServerRole = "FollowerRole"
+const CandidateRole ServerRole = "CandidateRole"
+
 // ServerStates store the id, log, and
-// status of a server (leader, follower, or candidate)
+// Role  of a server (leader, follower, or candidate)
 type ServerState struct {
-	ServerId int
+	ServerId    int
 	CurrentTerm int
-	VotedFor int
-	Log []LogEntry
+	VotedFor    int
+	Log         []LogEntry
+	Role        ServerRole
+}
 }
