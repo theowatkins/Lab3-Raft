@@ -92,8 +92,10 @@ func startServer(
 		done <- true
 	}()
 
-	/* On Win Handler
-	 *
+	/* On Win Handler. Responsibilities includes
+	 * - updating role of server to leader
+	 * - running heartbeat thread
+	 * - managing client requests (in progress)
 	 */
 	go func(){
 		select {
@@ -101,7 +103,8 @@ func startServer(
 			serverStateLock.Lock()
 			state.Role = LeaderRole
 			serverStateLock.Unlock()
-			runHeartbeatThread(&state, leaderCommunicationChannels)
+			go runHeartbeatThread(&state, leaderCommunicationChannels)
+			go readAndDistributeClientRequests()
 		}
 	}()
 }
@@ -115,6 +118,8 @@ func runHeartbeatThread(state * ServerState, leaderCommunicationChannels *[Clust
 		time.Sleep(HeartBeatDelay * time.Millisecond)
 	}
 }
+
+func readAndDistributeClientRequests(){} //dummy function in charge of distributed append logs to followers
 
 func printMessageFromLeader(id int, logEntry LogEntry){
 	if logEntry.Content.Key == "" &&
