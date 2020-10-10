@@ -8,7 +8,7 @@ import (
 import "time"
 
 const HeartBeatDelay = 1000
-const ClusterSize = 2
+const ClusterSize = 8
 const ElectionTimeOut = 2 * 1000 // in milliseconds
 
 type Vote struct {
@@ -65,26 +65,36 @@ func startServer(
 		}
 	}()
 
-	// receive messages from leader
+	/* Handles messages from leader. Duties include:
+	* - ignore anything with stale term
+	 * - update timeSinceLastUpdate
+	 * - process new log entries + heartbeats (empty logs)
+	 */
 	go func () {
 		for newLogEntry := range leaderCommunicationChannels[state.ServerId] {
-			timeSinceLastUpdate = time.Now()
+			 if newLogEntry.Term >= state.CurrentTerm {
+				timeSinceLastUpdate = time.Now()
 
-			if isElection { //received message from leader during election,
-				isElection = false
-				serverStateLock.Lock()
-				if state.Role != LeaderRole {
-					state.Role = FollowerRole // for candidates that lost the election
+				if isElection { //received message from leader during election,
+					isElection = false
+					serverStateLock.Lock()
+					if state.Role != LeaderRole {
+						state.Role = FollowerRole // for candidates that lost the election
+					}
+					serverStateLock.Unlock()
 				}
-				serverStateLock.Unlock()
+
+				printMessageFromLeader(state.ServerId, newLogEntry)
+				//process log entry here
 			}
 
-			printMessageFromLeader(state.ServerId, newLogEntry)
-			//process log entry here
 		}
 		done <- true
 	}()
 
+	/* On Win Handler
+	 *
+	 */
 	go func(){
 		select {
 		case <-onWinChannel: // got enough votes
@@ -95,6 +105,7 @@ func startServer(
 				for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
 					leaderCommunicationChannel <- LogEntry{serverIndex, state.CurrentTerm, KeyValue{"", ""}}
 				}
+				fmt.Println() //breaks up prints into chunks for each beat.
 				time.Sleep(HeartBeatDelay * time.Millisecond)
 			}
 		}
