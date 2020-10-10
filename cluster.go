@@ -7,7 +7,8 @@ import (
 )
 import "time"
 
-const ClusterSize = 8
+const HeartBeatDelay = 1000
+const ClusterSize = 2
 const ElectionTimeOut = 2 * 1000 // in milliseconds
 
 type Vote struct {
@@ -46,6 +47,7 @@ func startServer(
 	electionThreadSleepTime := time.Millisecond * 50
 	timeSinceLastUpdate := time.Now() //update includes election or message from leader
 	serverStateLock := new(sync.Mutex)
+	winnerChannel := make(chan bool)
 
 	/* Election Timer: Checks if timeout is surpassed and starts election. Timeout is reached when:
 	 * 1. no message from leader or
@@ -55,9 +57,10 @@ func startServer(
 		for {
 			timeElapsed := time.Now().Sub(timeSinceLastUpdate)
 			if timeElapsed.Milliseconds() > ElectionTimeOut {
+				fmt.Println(state.ServerId, ": Time since last update: ", timeSinceLastUpdate)
 				isElection = true
 				timeSinceLastUpdate = time.Now()
-				go elect(&state, voteChannels, leaderCommunicationChannels)
+				go elect(&state, voteChannels, winnerChannel)
 			}
 			time.Sleep(electionThreadSleepTime)
 		}
@@ -66,17 +69,38 @@ func startServer(
 	// receive messages from leader
 	go func () {
 		for newLogEntry := range leaderCommunicationChannels[state.ServerId] {
+			timeSinceLastUpdate = time.Now()
+
 			if isElection { //received message from leader during election,
-				serverStateLock.Lock()
-				state.Role = FollowerRole // for candidates that lost the election
-				serverStateLock.Unlock()
+				if state.Role != LeaderRole {
+					serverStateLock.Lock()
+					state.Role = FollowerRole // for candidates that lost the election
+					serverStateLock.Unlock()
+				}
 				isElection = false
 			}
-			timeSinceLastUpdate = time.Now()
-			fmt.Print(state.ServerId, ": received log entry received from leader -> ", newLogEntry, "\n")
+
+			fmt.Print(state.ServerId, ": received log entry received from leader -> ", newLogEntry, ":", timeSinceLastUpdate,"\n")
 			//process log entry here
 		}
 		done <- true
+	}()
+
+	go func(){
+		select {
+		case <-winnerChannel: // got enough votes
+			serverStateLock.Lock()
+			state.Role = LeaderRole
+			serverStateLock.Unlock()
+			for state.Role == LeaderRole {
+				fmt.Println(state.ServerId, " is sending beats for term: ", state.CurrentTerm)
+				for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
+					leaderCommunicationChannel <- LogEntry{serverIndex, state.CurrentTerm, KeyValue{"", ""}}
+				}
+				fmt.Println(state.ServerId, " finished sending beats.")
+				time.Sleep(HeartBeatDelay * time.Millisecond)
+			}
+		}
 	}()
 }
 
@@ -87,7 +111,7 @@ func startServer(
 func elect(
 	state * ServerState,
 	voteChannels *[ClusterSize]chan Vote,
-	leaderCommunicationChannels *[ClusterSize]chan LogEntry,
+	winnerChannel chan bool,
 	) {
 	timeUntilElectionStart := rand.Intn(150) + 150
 	electionStartTimer := time.NewTimer(time.Duration(timeUntilElectionStart) * time.Millisecond)
@@ -95,7 +119,7 @@ func elect(
 
 	select {
 	case <-electionStartTimer.C: // candidate
-		fmt.Println("Server ", state.ServerId, " is a candidate")
+		fmt.Println("Server ", state.ServerId, " is a candidate for term: ", state.CurrentTerm + 1)
 
 		// lock while transitioning to candidate
 		serverStateLock.Lock()
@@ -105,18 +129,9 @@ func elect(
 		serverStateLock.Unlock()
 		
 		//count votes
-		winnerChannel := make(chan bool)
 		go requestVotes(state, voteChannels, winnerChannel)
 
-		select {
-		case <-winnerChannel: // got enough votes
-			for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
-				serverStateLock.Lock()
-				state.Role = LeaderRole
-				serverStateLock.Unlock()
-				leaderCommunicationChannel <- LogEntry{serverIndex, state.CurrentTerm, KeyValue{"", ""}}
-			}
-		}
+
 	/* Response handler for vote requests.
 	 * Note, CurrentTerm is used as a flag to identify if a server has voted.
 	 * If vote request contains a future term, then vote is confirmed and CurrentTerm updated to reject any
@@ -156,7 +171,7 @@ func requestVotes(state * ServerState, voteChannels *[ClusterSize]chan Vote, onW
 	}
 
 	if votes >= ClusterSize/2 { // won election
-		fmt.Println("Server ", state.ServerId, " is the leader!")
+		fmt.Print("Server ", state.ServerId, " is the leader!\n\n")
 		onWinChannel <- true
 	} else {
 		fmt.Println("Server ", state.ServerId, " lost the election.")
