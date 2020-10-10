@@ -47,7 +47,7 @@ func startServer(
 	electionThreadSleepTime := time.Millisecond * 50
 	timeSinceLastUpdate := time.Now() //update includes election or message from leader
 	serverStateLock := new(sync.Mutex)
-	winnerChannel := make(chan bool)
+	onWinChannel := make(chan bool)
 
 	/* Election Timer: Checks if timeout is surpassed and starts election. Timeout is reached when:
 	 * 1. no message from leader or
@@ -59,7 +59,7 @@ func startServer(
 			if timeElapsed.Milliseconds() > ElectionTimeOut {
 				isElection = true
 				timeSinceLastUpdate = time.Now()
-				go elect(&state, voteChannels, winnerChannel)
+				go elect(&state, voteChannels, onWinChannel)
 			}
 			time.Sleep(electionThreadSleepTime)
 		}
@@ -71,12 +71,12 @@ func startServer(
 			timeSinceLastUpdate = time.Now()
 
 			if isElection { //received message from leader during election,
-				if state.Role != LeaderRole {
-					serverStateLock.Lock()
-					state.Role = FollowerRole // for candidates that lost the election
-					serverStateLock.Unlock()
-				}
 				isElection = false
+				serverStateLock.Lock()
+				if state.Role != LeaderRole {
+					state.Role = FollowerRole // for candidates that lost the election
+				}
+				serverStateLock.Unlock()
 			}
 
 			printMessageFromLeader(state.ServerId, newLogEntry)
@@ -87,7 +87,7 @@ func startServer(
 
 	go func(){
 		select {
-		case <-winnerChannel: // got enough votes
+		case <-onWinChannel: // got enough votes
 			serverStateLock.Lock()
 			state.Role = LeaderRole
 			serverStateLock.Unlock()
@@ -119,7 +119,7 @@ func printMessageFromLeader(id int, logEntry LogEntry){
 func elect(
 	state * ServerState,
 	voteChannels *[ClusterSize]chan Vote,
-	winnerChannel chan bool,
+	onWinChannel chan bool,
 	) {
 	timeUntilElectionStart := rand.Intn(150) + 150
 	electionStartTimer := time.NewTimer(time.Duration(timeUntilElectionStart) * time.Millisecond)
@@ -137,7 +137,7 @@ func elect(
 		serverStateLock.Unlock()
 		
 		//count votes
-		go requestVotes(state, voteChannels, winnerChannel)
+		go requestVotes(state, voteChannels, onWinChannel)
 
 
 	/* Response handler for vote requests.
