@@ -73,7 +73,7 @@ func startServer(
 				isElection = false
 			}
 			timeSinceLastUpdate = time.Now()
-			fmt.Print("New log entry received from leader:", newLogEntry, "\n")
+			fmt.Print(state.ServerId, ": received log entry received from leader -> ", newLogEntry, "\n")
 			//process log entry here
 		}
 		done <- true
@@ -107,8 +107,7 @@ func elect(
 		//count votes
 		winnerChannel := make(chan bool)
 		go requestVotes(state, voteChannels, winnerChannel)
-		
-		
+
 		select {
 		case <-winnerChannel: // got enough votes
 			for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
@@ -156,6 +155,6 @@ func requestVotes(state * ServerState, voteChannels *[ClusterSize]chan Vote, win
 		fmt.Println("Server ", state.ServerId, " is the leader!")
 		winnerChannel <- true
 	} else {
-		fmt.Println("Server ", state.ServerId, " lost election.")
+		fmt.Println("Server ", state.ServerId, " lost the election.")
 	}
 }

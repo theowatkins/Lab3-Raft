@@ -7,6 +7,7 @@ func main() {
 	//    - might need a reject channel for when the cluster fails to 
 	//      store the pair (meaning it does an election and starts a 
 	//      new term) so the client needs to resend it
+	fmt.Print("Creating cluster...\n")
 
 	// 2. Spawn cluster
 	done := make(chan bool)
