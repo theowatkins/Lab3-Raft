@@ -108,13 +108,14 @@ func elect(
 		winnerChannel := make(chan bool)
 		go requestVotes(state, voteChannels, winnerChannel)
 		
+		
 		select {
 		case <-winnerChannel: // got enough votes
 			for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
 				serverStateLock.Lock()
 				state.Role = LeaderRole
 				serverStateLock.Unlock()
-				leaderCommunicationChannel <- LogEntry{serverIndex, state.CurrentTerm, KeyValue{"assert", "dominance"}}
+				leaderCommunicationChannel <- LogEntry{serverIndex, state.CurrentTerm, KeyValue{"", ""}}
 			}
 		}
 	// CurrentTerm is used as a flag to identify if a server has voted.
