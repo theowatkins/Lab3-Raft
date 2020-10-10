@@ -57,7 +57,6 @@ func startServer(
 		for {
 			timeElapsed := time.Now().Sub(timeSinceLastUpdate)
 			if timeElapsed.Milliseconds() > ElectionTimeOut {
-				fmt.Println(state.ServerId, ": Time since last update: ", timeSinceLastUpdate)
 				isElection = true
 				timeSinceLastUpdate = time.Now()
 				go elect(&state, voteChannels, winnerChannel)
@@ -80,7 +79,7 @@ func startServer(
 				isElection = false
 			}
 
-			fmt.Print(state.ServerId, ": received log entry received from leader -> ", newLogEntry, ":", timeSinceLastUpdate,"\n")
+			printMessageFromLeader(state.ServerId, newLogEntry)
 			//process log entry here
 		}
 		done <- true
@@ -93,16 +92,25 @@ func startServer(
 			state.Role = LeaderRole
 			serverStateLock.Unlock()
 			for state.Role == LeaderRole {
-				fmt.Println(state.ServerId, " is sending beats for term: ", state.CurrentTerm)
 				for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
 					leaderCommunicationChannel <- LogEntry{serverIndex, state.CurrentTerm, KeyValue{"", ""}}
 				}
-				fmt.Println(state.ServerId, " finished sending beats.")
 				time.Sleep(HeartBeatDelay * time.Millisecond)
 			}
 		}
 	}()
 }
+
+func printMessageFromLeader(id int, logEntry LogEntry){
+	if logEntry.Content.Key == "" &&
+		logEntry.Content.Value == "" {
+		fmt.Println(id, " received heartbeat from leader.")
+	} else {
+		fmt.Println(id, " received new entry: ", logEntry)
+	}
+
+}
+
 
 /* Begins an election and handles the following events:
  * 1. Election timeout reaches threshold -> Become candidate
