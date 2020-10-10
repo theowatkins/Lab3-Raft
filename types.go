@@ -29,4 +29,3 @@ type ServerState struct {
 	Log         []LogEntry
 	Role        ServerRole
 }
-}
