@@ -117,14 +117,17 @@ func elect(
 				leaderCommunicationChannel <- LogEntry{serverIndex, state.CurrentTerm, KeyValue{"", ""}}
 			}
 		}
-	// CurrentTerm is used as a flag to identify if a server has voted.
-	case voteRequest := <-(*voteChannels)[state.ServerId]: // follower (being asked to vote)
+	/* Response handler for vote requests.
+	 * Note, CurrentTerm is used as a flag to identify if a server has voted.
+	 * If vote request contains a future term, then vote is confirmed and CurrentTerm updated to reject any
+	 * other candidate running in the same term.
+	 */
+	case voteRequest := <-(*voteChannels)[state.ServerId]: //
 		serverStateLock.Lock()
 		if voteRequest.Term > state.CurrentTerm { // I haven't voted yet (noted by stale term)
 			state.CurrentTerm = voteRequest.Term
 			state.VotedFor = voteRequest.VoteFor
 			serverStateLock.Unlock()
-
 			voteRequest.Responses <- true
 			fmt.Println("Server ", state.ServerId, " voted for ", state.VotedFor)
 		} else { // I already voted
@@ -133,8 +136,9 @@ func elect(
 	}
 }
 
-func requestVotes(state * ServerState, voteChannels *[ClusterSize]chan Vote, winnerChannel chan bool) {
+func requestVotes(state * ServerState, voteChannels *[ClusterSize]chan Vote, onWinChannel chan bool) {
 	// send vote requests to other servers
+	//TODO: What if one of the servers is down -- then this will hang forever
 	responses := make(chan bool)
 	for i, c := range *voteChannels {
 		if i != state.ServerId {
@@ -153,7 +157,7 @@ func requestVotes(state * ServerState, voteChannels *[ClusterSize]chan Vote, win
 
 	if votes >= ClusterSize/2 { // won election
 		fmt.Println("Server ", state.ServerId, " is the leader!")
-		winnerChannel <- true
+		onWinChannel <- true
 	} else {
 		fmt.Println("Server ", state.ServerId, " lost the election.")
 	}
