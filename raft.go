@@ -11,13 +11,12 @@ func main() {
 
 	// 2. Spawn cluster
 	done := make(chan bool)
-	initCluster(done)
+	initCluster(done, TestPersister{})
 
 	for i := 0; i < ClusterSize; i++ {
 		<-done
 	}
 
 	fmt.Println("all done")
-
 	// 3. Send Key Value pairs to cluster
 }
