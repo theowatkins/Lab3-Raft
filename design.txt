@@ -1,0 +1,1 @@
+The persistent state of the application will be a .txt file containing an log entry per line.

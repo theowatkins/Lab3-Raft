@@ -17,15 +17,17 @@ type Vote struct {
 	Responses chan bool
 }
 
-func initCluster(done chan bool) {
+func initCluster(done chan bool, persister Persister) {
 
 	var voteChannels [ClusterSize]chan Vote
 	var leaderCommunicationChannel [ClusterSize] chan LogEntry
 
+	previousLogEntries := initializeServerStateFromPersister(persister)
+
 	// Spawn 8 nodes (all followers to start)
 	for i := 0; i < ClusterSize; i++ {
 		// initialize state as followers
-		state := ServerState{i, 0, -1, []LogEntry{}, FollowerRole}
+		state := ServerState{i, 0, -1, previousLogEntries, FollowerRole}
 
 		voteChannels[i] = make(chan Vote)
 		leaderCommunicationChannel[i] = make(chan LogEntry)

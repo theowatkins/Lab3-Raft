@@ -1,1 +1,1 @@
-go run types.go cluster.go raft.go
+go run types.go cluster.go TestPersister.go raftstate.go raft.go
