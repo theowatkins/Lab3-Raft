@@ -27,7 +27,7 @@ func initCluster(done chan bool, persister Persister) {
 	// Spawn 8 nodes (all followers to start)
 	for i := 0; i < ClusterSize; i++ {
 		// initialize state as followers
-		state := ServerState{i, 0, -1, previousLogEntries, FollowerRole}
+		state := ServerState{i, 0, -1, previousLogEntries, FollowerRole, 0,0}
 
 		voteChannels[i] = make(chan Vote)
 		leaderCommunicationChannel[i] = make(chan LogEntry)
