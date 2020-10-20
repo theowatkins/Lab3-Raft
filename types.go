@@ -15,17 +15,96 @@ type LogEntry struct {
     Content KeyValue
 }
 
+type AppendEntriesMessage struct {
+	/* Leaders term
+	 *
+	 */
+	Term int
+
+	/* subject to change but used for redirection to leader
+	 *
+	 */
+	LeaderId * ServerState
+
+	/* index of log entry immediately preceding new ones
+	 *
+	 */
+	PrevLogIndex int
+
+	/* term of PrevLogIndex entry
+	 *
+	 */
+	PrevLogTerm int
+
+	/* log entries to store
+	 *
+	 */
+	Entries []LogEntry
+
+	/* leader's commitIndex
+	 *
+	 */
+	LeaderCommit int
+}
+
+type AppendEntriesResponse struct {
+	/* Current Term. Used for leader to update itself.
+	 *
+	 */
+	term int
+
+	/* True if follower contained entry matching prevLogIndex and prevLogTerm
+	 * False otherwise.
+	 */
+	success bool
+}
+
 type ServerRole string
 const LeaderRole ServerRole = "LeaderRole"
 const FollowerRole ServerRole = "FollowerRole"
 const CandidateRole ServerRole = "CandidateRole"
 
-// ServerStates store the id, log, and
-// Role  of a server (leader, follower, or candidate)
 type ServerState struct {
 	ServerId    int
+	/* Latest term server has seen.
+	 * Initialized to 0 on first boot, increases monotonically.
+	 */
 	CurrentTerm int
+
+	/* CandidateId that received vote in current term.
+	 * Or nullif none.
+	 */
 	VotedFor    int
+
+	/* Log Entries; each entry contains command for state machine, and term when entry was received by leader.
+	 * First index is 1.
+	 */
 	Log         []LogEntry
+
+	/* Enum containing the current role of the server. Used to block candidates
+	 * from becoming leaders if leader already exists.
+	 */
 	Role        ServerRole
+
+	/* Index of highest log entry known to be committed.
+	 * Initialized to 0, increases monotonically.
+	 */
+	commitIndex int
+
+	/* Index of highest log entry applied to state.
+	 * Initialized to 0, increases monotonically.
+	 */
+	lastApplied int
+}
+
+type LeaderState struct {
+	/* For each server, index of the next log entry to send to that server.
+	 * Initialized to leader last log index + 1.
+	 */
+	nextIndex []int
+
+	/* For each server, index of highest log entry known to be replicated on server.
+	 * Initialized to 0, increases monotonically.
+	 */
+	matchIndex []int
 }
