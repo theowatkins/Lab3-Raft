@@ -1,0 +1,44 @@
+
+RPC Requirements:
+    AppendEntries (AE):
+        AE1. Reply false if term < currentTerm
+        AE2. Reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm
+        AE3. If an existing entry conflicts with a new one (same index but different terms), delete the eisting entry and all that follow it
+        AE4. Append any new entries not already in the log
+        AE5. If leaderCommit > commitIndex set commitIndex = ming(leaderCommit, index of last entry)
+
+    Request Vote (RV):
+        RV1. Reply false if term < currentTerm
+        RV2. if votedFor is null or candidateId, and candidates log is at least as up-to-date as receiver's log, grant vote
+
+Requirements for Servers :
+
+    All Servers (AS):
+        AS1. If commitIndex > lastApplied: increment lastApplied, apply log[lastApplied] to state machines.
+        AS2. If RPC request or response contains term T > currentTerm: setCurrentTerm = T, convert to follower
+
+    Followers (F):
+        (DONE) F1. Response to RPCs from candidates and leaders
+        (DONE) F2. If election timeout elapses without receiving AppendEntries from current leader or granting vote to candidate: convert to candidate
+
+    Candidates (C):
+        (DONE) C1. On conversion to candidate, start election. Includes: increment current term, vote for self, reset election timer, send RequestVote RPC to all other servers
+        (DONE) C2. If votes received from majority of serves: become leader
+        (DONE) C3. If AppendEntries RPC received from new leader: convert to follower
+        (DONE) C4. If election timeout elapses: start new election
+
+
+    Leaders (L):
+        L1. Upon election: send initial empty ApendEntries RPCs (heartbeat ) to each server; repeat during idle periods to prevent election timeouts
+        L2. If command received from client: append entry to local log, response after entry applied to state machine
+        L3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex.
+        L3.1 If successful: update nextIndex and matchIndex for follower
+        L3.2 If AppendEntries fails because of log inconsistency: decrement nextIndex and retry
+        L4. If there exists an N such that N > commitIndex, a majority of matchIndex[i] >= N, and log[N].term == currentTerm: set commitIndex = N
+
+Persistent State Requirements:
+    P1. save and restore persistent state from a Persister object (see persister.go)
+    P2. Whoever calls Raft.Make() supplies a Persister that initially holds Raft's most recently persisted state (if any)
+    P3. Raft should initialize its state from that Persister, and should use it to save its persistent state each
+
+
