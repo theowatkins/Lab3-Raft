@@ -23,7 +23,7 @@ const UndefinedIndex = -1
 func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) {
 
 	var voteChannels [ClusterSize]chan Vote
-	var leaderCommunicationChannel [ClusterSize]AppendEntriesCom
+	var appendEntriesCom [ClusterSize]AppendEntriesCom
 
 	previousLogEntries := initializeServerStateFromPersister(persister)
 
@@ -33,9 +33,9 @@ func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) 
 		state := ServerState{i, 0, -1, previousLogEntries, FollowerRole, UndefinedIndex,UndefinedIndex}
 
 		voteChannels[i] = make(chan Vote)
-		leaderCommunicationChannel[i] = AppendEntriesCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
+		appendEntriesCom[i] = AppendEntriesCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
 
-		go startServer(&state, &voteChannels, &leaderCommunicationChannel, clientCommunicationChannel)
+		go startServer(&state, &voteChannels, &appendEntriesCom, clientCommunicationChannel)
 	}
 }
 
@@ -161,9 +161,9 @@ func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *S
 
 func runHeartbeatThread(
 	state * ServerState, 
-	leaderCommunicationChannels *[ClusterSize]AppendEntriesCom) {
+	appendEntriesCom *[ClusterSize]AppendEntriesCom) {
 	for state.Role == LeaderRole {
-		for _, leaderCommunicationChannel := range *leaderCommunicationChannels {
+		for _, leaderCommunicationChannel := range *appendEntriesCom {
 			leaderCommunicationChannel.message <- AppendEntriesMessage{
 				// leader's term
 				state.CurrentTerm,
@@ -193,13 +193,13 @@ func runHeartbeatThread(
 func readAndDistributeClientRequests(
 	state * ServerState, 
 	serverLeaderStates *[ClusterSize]LeaderState,
-	leaderCommunicationChannels *[ClusterSize]AppendEntriesCom,
+	appendEntriesCom *[ClusterSize]AppendEntriesCom,
 	clientCommunicationChannel chan KeyValue) {
 
 	/* AppendEntriesResponse Handlers
 	 * For each server a goroutine is created that continuously reads AppendEntries resopnses
 	 */
-	for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
+	for serverIndex, leaderCommunicationChannel := range *appendEntriesCom {
 		leaderCommunicationChannel := leaderCommunicationChannel
 		serverIndex := serverIndex
 		go func () {
@@ -234,15 +234,15 @@ func readAndDistributeClientRequests(
 			state.Log = append(state.Log, LogEntry{state.CurrentTerm, clientRequest})
 			state.lastApplied++
 
-			for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
+			for serverIndex, leaderCommunicationChannel := range *appendEntriesCom {
 				go sendAppend(leaderCommunicationChannel, state, serverLeaderStates[serverIndex])
 			}
 		} 
 	}
 }
 
-func sendAppend(leaderCommunicationChannel AppendEntriesCom, state *ServerState, leaderState LeaderState) {
-	leaderCommunicationChannel.message <- AppendEntriesMessage {
+func sendAppend(appendEntriesCom AppendEntriesCom, state *ServerState, leaderState LeaderState) {
+	appendEntriesCom.message <- AppendEntriesMessage {
 		// leader's term
 		state.CurrentTerm,
 		
@@ -263,20 +263,20 @@ func sendAppend(leaderCommunicationChannel AppendEntriesCom, state *ServerState,
 		state.commitIndex}
 }
 
-func printMessageFromLeader(id int, append AppendEntriesMessage){
-	if debug && len(append.Entries) > 0 {
-		printMessage(id, append)
+func printMessageFromLeader(id int, message AppendEntriesMessage){
+	if debug && len(message.Entries) > 0 {
+		printMessage(id, message)
 	} else {
-		//fmt.Println(id, " received heartbeat from ", append.LeaderId)
+		//fmt.Println(id, " received heartbeat from ", message.LeaderId)
 	}
 }
 
-func printMessage(id int, append AppendEntriesMessage) {
-	fmt.Println("Server ", id, " received new entry from ", append.LeaderId, ": ")
-	fmt.Println("\tEntries to append: ", append.Entries)
-	fmt.Println("\tPrevious index: ", append.PrevLogIndex)
-	fmt.Println("\tPrevious term: ", append.PrevLogTerm)
-	fmt.Println("\tLeader term: ", append.Term)
+func printMessage(id int, message AppendEntriesMessage) {
+	fmt.Println("Server ", id, " received new entry from ", message.LeaderId, ": ")
+	fmt.Println("\tEntries to message: ", message.Entries)
+	fmt.Println("\tPrevious index: ", message.PrevLogIndex)
+	fmt.Println("\tPrevious term: ", message.PrevLogTerm)
+	fmt.Println("\tLeader term: ", message.Term)
 }
 
 /* Begins an election and handles the following events:
