@@ -289,7 +289,7 @@ func elect(
 			state.VotedFor = voteRequest.VoteFor
 			serverStateLock.Unlock()
 			voteRequest.Responses <- true
-		} else { // I already voted
+		} else { //implements RV1.
 			voteRequest.Responses <- false
 		}
 	}
