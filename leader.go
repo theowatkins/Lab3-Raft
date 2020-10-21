@@ -14,6 +14,23 @@ func readAndDistributeClientRequests(
 	appendEntriesCom *[ClusterSize]AppendEntriesCom,
 	clientCommunicationChannel *chan KeyValue) {
 
+	/* AppendEntriesRequest Handler
+	 * Distributes a client request to all servers in the system.
+	 */
+	for state.Role == LeaderRole {
+		select {
+		case clientRequest := <-*clientCommunicationChannel:
+			fmt.Println("received entry from client.")
+			// Append to leader log
+			state.Log = append(state.Log, LogEntry{state.CurrentTerm, clientRequest})
+			state.lastApplied++
+
+			for serverIndex, leaderCommunicationChannel := range *appendEntriesCom {
+				go sendAppend(leaderCommunicationChannel, state, serverLeaderStates[serverIndex])
+			}
+		}
+	}
+
 	/* AppendEntriesResponse Handlers
 	 * For each server a goroutine is created that continuously reads AppendEntries resopnses
 	 */
@@ -39,23 +56,6 @@ func readAndDistributeClientRequests(
 				}
 			}
 		}()
-	}
-
-	/* AppendEntriesRequest Handler
-	 * Distributes a client request to all servers in the system.
-	 */
-	for state.Role == LeaderRole {
-		select {
-		case clientRequest := <-*clientCommunicationChannel:
-			fmt.Println("received entry from client.")
-			// Append to leader log
-			state.Log = append(state.Log, LogEntry{state.CurrentTerm, clientRequest})
-			state.lastApplied++
-
-			for serverIndex, leaderCommunicationChannel := range *appendEntriesCom {
-				go sendAppend(leaderCommunicationChannel, state, serverLeaderStates[serverIndex])
-			}
-		}
 	}
 }
 
