@@ -10,7 +10,6 @@ type KeyValue struct {
 // LogEntries are sent from the leader 
 // to the followers
 type LogEntry struct {
-    Idx int
     Term int
     Content KeyValue
 }
@@ -24,7 +23,7 @@ type AppendEntriesMessage struct {
 	/* subject to change but used for redirection to leader
 	 *
 	 */
-	LeaderId * ServerState
+	LeaderId int
 
 	/* index of log entry immediately preceding new ones
 	 *
@@ -57,7 +56,24 @@ type AppendEntriesResponse struct {
 	 * False otherwise.
 	 */
 	success bool
+
+	/* Message to retry sending (with more log entries) if failed
+	 * 
+	 */
+	message AppendEntriesMessage
 }
+
+type LeaderCom struct {
+	/* Messages from client to cluster
+	 *
+	 */
+	message chan AppendEntriesMessage
+
+	/* channel for response from the cluster
+	 *
+	 */
+	response chan AppendEntriesResponse
+} 
 
 type ServerRole string
 const LeaderRole ServerRole = "LeaderRole"
@@ -101,10 +117,10 @@ type LeaderState struct {
 	/* For each server, index of the next log entry to send to that server.
 	 * Initialized to leader last log index + 1.
 	 */
-	nextIndex []int
+	nextIndex int
 
 	/* For each server, index of highest log entry known to be replicated on server.
 	 * Initialized to 0, increases monotonically.
 	 */
-	matchIndex []int
+	matchIndex int
 }
