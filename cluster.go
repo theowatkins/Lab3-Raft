@@ -10,12 +10,15 @@ import "time"
 const HeartBeatDelay = 500
 const ClusterSize = 8
 const ElectionTimeOut = 5 * 1000 // in milliseconds
-const debug = false ;
+var debug = false
+
 type Vote struct {
 	Term int
 	VoteFor int
 	Responses chan bool
 }
+
+const UndefinedIndex = -1
 
 func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) {
 
@@ -27,7 +30,7 @@ func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) 
 	// Spawn 8 nodes (all followers to start)
 	for i := 0; i < ClusterSize; i++ {
 		// initialize state as followers
-		state := ServerState{i, 0, -1, previousLogEntries, FollowerRole, 0,0}
+		state := ServerState{i, 0, -1, previousLogEntries, FollowerRole, UndefinedIndex,UndefinedIndex}
 
 		voteChannels[i] = make(chan Vote)
 		leaderCommunicationChannel[i] = AppendEntriesCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
@@ -88,7 +91,9 @@ func startServer(
 					}
 
 					printMessageFromLeader(state.ServerId, appendEntryRequest)
-					processAppendEntryRequest(appendEntryRequest, state, appendEntriesCom)
+					if state.Role != LeaderRole { //processed separately before all others
+						processAppendEntryRequest(appendEntryRequest, state, appendEntriesCom)
+					}
 				}
 			}
 		}
@@ -132,7 +137,7 @@ func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *S
 	if len(appendEntryRequest.Entries) > 0 {
 		if appendEntryRequest.PrevLogIndex == 0 {
 			if state.ServerId == 0 {
-				fmt.Println("Appending to log", appendEntryRequest.Entries)
+				fmt.Println("Server 0 appending ", len(appendEntryRequest.Entries), " entries to log")
 			}
 
 			for _, entry := range appendEntryRequest.Entries {
@@ -187,45 +192,57 @@ func runHeartbeatThread(
 //TODO: respond to client
 func readAndDistributeClientRequests(
 	state * ServerState, 
-	leaderState *[ClusterSize]LeaderState,
+	serverLeaderStates *[ClusterSize]LeaderState,
 	leaderCommunicationChannels *[ClusterSize]AppendEntriesCom,
 	clientCommunicationChannel chan KeyValue) {
 
-	for state.Role == LeaderRole {
-		select {
-		case clientRequest := <-clientCommunicationChannel:
-			// Append to log
-			state.Log = append(state.Log, LogEntry{state.CurrentTerm, clientRequest})
-			state.lastApplied++
-
-			for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
-				go sendAppend(leaderCommunicationChannel, state, leaderState[serverIndex])
-			}
-		default:
-			// check response channels
-			for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
+	/* AppendEntriesResponse Handlers
+	 * For each server a goroutine is created that continuously reads AppendEntries resopnses
+	 */
+	for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
+		leaderCommunicationChannel := leaderCommunicationChannel
+		serverIndex := serverIndex
+		go func () {
+			for state.Role == LeaderRole {
 				select {
 				case r := <- leaderCommunicationChannel.response:
 					// TODO: why does the paper say to respond with a term?!
 					if r.success {
 						// update matchIndex and nextIndex on successful appendEntry
-						leaderState[serverIndex].matchIndex = r.message.PrevLogIndex + len(r.message.Entries)
-						leaderState[serverIndex].nextIndex = leaderState[serverIndex].matchIndex + 1
+						serverLeaderStates[serverIndex].matchIndex = r.message.PrevLogIndex + len(r.message.Entries)
+						serverLeaderStates[serverIndex].nextIndex = serverLeaderStates[serverIndex].matchIndex + 1
 					} else {
 						// resend message with more logEntries on failure
-						leaderState[serverIndex].nextIndex -= 1
-						go sendAppend(leaderCommunicationChannel, state, leaderState[serverIndex])
+						serverLeaderStates[serverIndex].nextIndex -= 1
+						go sendAppend(leaderCommunicationChannel, state, serverLeaderStates[serverIndex])
 					}
 				default:
 					// do nothing
 				}
+			}
+		}()
+	}
+
+	/* AppendEntriesRequest Handler
+	 * Distributes a client request to all servers in the system.
+	 */
+	for state.Role == LeaderRole {
+		select {
+		case clientRequest := <-clientCommunicationChannel:
+			fmt.Println("received entry from client.")
+			// Append to leader log
+			state.Log = append(state.Log, LogEntry{state.CurrentTerm, clientRequest})
+			state.lastApplied++
+
+			for serverIndex, leaderCommunicationChannel := range *leaderCommunicationChannels {
+				go sendAppend(leaderCommunicationChannel, state, serverLeaderStates[serverIndex])
 			}
 		} 
 	}
 }
 
 func sendAppend(leaderCommunicationChannel AppendEntriesCom, state *ServerState, leaderState LeaderState) {
-	leaderCommunicationChannel.message <- AppendEntriesMessage{
+	leaderCommunicationChannel.message <- AppendEntriesMessage {
 		// leader's term
 		state.CurrentTerm,
 		
@@ -240,24 +257,22 @@ func sendAppend(leaderCommunicationChannel AppendEntriesCom, state *ServerState,
 		
 		// new LogEntries to store
 		// from nextIndex to end of log
-		state.Log[leaderState.nextIndex:],
+		state.Log[leaderState.nextIndex - 1:],
 
 		// leader's current commit index
 		state.commitIndex}
 }
 
 func printMessageFromLeader(id int, append AppendEntriesMessage){
-	if len(append.Entries) > 0 {
-		fmt.Println("Server ", id, " received new entry from ", append.LeaderId, ": ")
-		if debug {
-			printMessage(append)
-		}
+	if debug && len(append.Entries) > 0 {
+		printMessage(id, append)
 	} else {
 		//fmt.Println(id, " received heartbeat from ", append.LeaderId)
 	}
 }
 
-func printMessage(append AppendEntriesMessage) {
+func printMessage(id int, append AppendEntriesMessage) {
+	fmt.Println("Server ", id, " received new entry from ", append.LeaderId, ": ")
 	fmt.Println("\tEntries to append: ", append.Entries)
 	fmt.Println("\tPrevious index: ", append.PrevLogIndex)
 	fmt.Println("\tPrevious term: ", append.PrevLogTerm)
