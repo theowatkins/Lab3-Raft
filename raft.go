@@ -1,23 +1,30 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"bufio"
+	"os"
+	"strings"
+)
 
 func main() {
 	// 1. Make client to cluster channel (KeyValue to store on system)
 	//    - might need a reject channel for when the cluster fails to 
 	//      store the pair (meaning it does an election and starts a 
 	//      new term) so the client needs to resend it
-	fmt.Print("Creating cluster...\n")
 
 	// 2. Spawn cluster
-	done := make(chan bool)
-	initCluster(done, TestPersister{})
+	clientCommunicationChannel := make(chan KeyValue)
+	fmt.Print("Creating cluster...\n")
+	initCluster(clientCommunicationChannel, TestPersister{})
 
-	for i := 0; i < ClusterSize; i++ {
-		<-done
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		fmt.Print("Enter Key, Value pair: ")
+		text, _ := reader.ReadString('\n')
+		pair := strings.Split(text, ",")
+		clientCommunicationChannel <-KeyValue{pair[0], pair[1]}
 	}
-
-	fmt.Println("all done")
-	// 3. Send Key Value pairs to cluster
 }
 
