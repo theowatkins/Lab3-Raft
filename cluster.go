@@ -56,15 +56,24 @@ func startServer(
 
 	go runElectionTimeoutThread(&timeSinceLastUpdate, &isElection, state, voteChannels, &onWinChannel, electionThreadSleepTime)
 	go startLeaderListener(appendEntriesCom, state, &timeSinceLastUpdate, &isElection, serverStateLock)
+	go onWinChannelListener(state, &onWinChannel, serverStateLock, appendEntriesCom, &clientCommunicationChannel)
+}
 
-	/* On Win Handler. Responsibilities includes
-	 * - updating role of server to leader
-	 * - running heartbeat thread
-	 * - managing client requests (in progress)
-	 */
-	go func() {
+/* On Win Handler. Responsibilities includes
+ * - updating role of server to leader
+ * - running heartbeat thread
+ * - managing client requests (in progress)
+ */
+func onWinChannelListener(
+	state *ServerState,
+	onWinChannel * chan bool,
+	serverStateLock *sync.Mutex,
+	appendEntriesCom *[8]AppendEntriesCom,
+	clientCommunicationChannel * chan KeyValue) {
+	//TODO: What if received message from new leader before onWinChannel gets to hear about it?
+	for {
 		select {
-		case <-onWinChannel: // got enough votes
+		case <-* onWinChannel: // got enough votes
 			serverStateLock.Lock()
 			state.Role = LeaderRole
 			serverStateLock.Unlock()
@@ -79,7 +88,7 @@ func startServer(
 			go runHeartbeatThread(state, appendEntriesCom) // Implements L1.
 			go readAndDistributeClientRequests(state, &leaderState, appendEntriesCom, clientCommunicationChannel)
 		}
-	}()
+	}
 }
 
 /* Handles messages from leader. Duties include:
@@ -210,7 +219,7 @@ func readAndDistributeClientRequests(
 	state * ServerState, 
 	serverLeaderStates *[ClusterSize]LeaderState,
 	appendEntriesCom *[ClusterSize]AppendEntriesCom,
-	clientCommunicationChannel chan KeyValue) {
+	clientCommunicationChannel * chan KeyValue) {
 
 	/* AppendEntriesResponse Handlers
 	 * For each server a goroutine is created that continuously reads AppendEntries resopnses
@@ -244,7 +253,7 @@ func readAndDistributeClientRequests(
 	 */
 	for state.Role == LeaderRole {
 		select {
-		case clientRequest := <-clientCommunicationChannel:
+		case clientRequest := <-*clientCommunicationChannel:
 			fmt.Println("received entry from client.")
 			// Append to leader log
 			state.Log = append(state.Log, LogEntry{state.CurrentTerm, clientRequest})
