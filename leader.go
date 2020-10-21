@@ -6,6 +6,67 @@ import (
 	"time"
 )
 
+/* On Win Handler. Responsibilities includes
+ * - updating role of server to leader
+ * - running heartbeat thread
+ * - managing client requests (in progress)
+ */
+func onWinChannelListener(
+	state *ServerState,
+	onWinChannel *chan bool,
+	serverStateLock *sync.Mutex,
+	appendEntriesCom *[8]AppendEntriesCom,
+	clientCommunicationChannel *chan KeyValue) {
+	//TODO: What if received message from new leader before onWinChannel gets to hear about it?
+	for {
+		select {
+		case <-* onWinChannel: // got enough votes
+			serverStateLock.Lock()
+			state.Role = LeaderRole
+			serverStateLock.Unlock()
+
+			// initialize leader state
+			var leaderState [ClusterSize]LeaderState
+			for i := 0; i < ClusterSize; i++ {
+				// Note that logentries are indexed from 1
+				leaderState[i] = LeaderState{len(state.Log) + 1, 0}
+			}
+
+			go runHeartbeatThread(state, appendEntriesCom) // Implements L1.
+			go readAndDistributeClientRequests(state, &leaderState, appendEntriesCom, clientCommunicationChannel)
+		}
+	}
+}
+
+func runHeartbeatThread(
+	state *ServerState,
+	appendEntriesCom *[ClusterSize]AppendEntriesCom) {
+	for state.Role == LeaderRole {
+		for _, leaderCommunicationChannel := range *appendEntriesCom {
+			leaderCommunicationChannel.message <- AppendEntriesMessage{
+				// leader's term
+				state.CurrentTerm,
+
+				// leader's ID
+				state.ServerId,
+
+				// index of last entry in log
+				len(state.Log),
+
+				// term of last entry in log
+				state.CurrentTerm,
+
+				// list of logentries to store
+				// ** empty for heartbeat **
+				[]LogEntry{},
+
+				// leader's current commit index
+				state.commitIndex}
+		}
+		time.Sleep(time.Duration(HeartBeatDelay) * time.Millisecond)
+	}
+}
+
 //TODO: update commitindex on majority
 //TODO: respond to client
 func readAndDistributeClientRequests(
@@ -56,67 +117,6 @@ func readAndDistributeClientRequests(
 				}
 			}
 		}()
-	}
-}
-
-func runHeartbeatThread(
-	state *ServerState,
-	appendEntriesCom *[ClusterSize]AppendEntriesCom) {
-	for state.Role == LeaderRole {
-		for _, leaderCommunicationChannel := range *appendEntriesCom {
-			leaderCommunicationChannel.message <- AppendEntriesMessage{
-				// leader's term
-				state.CurrentTerm,
-
-				// leader's ID
-				state.ServerId,
-
-				// index of last entry in log
-				len(state.Log),
-
-				// term of last entry in log
-				state.CurrentTerm,
-
-				// list of logentries to store
-				// ** empty for heartbeat **
-				[]LogEntry{},
-
-				// leader's current commit index
-				state.commitIndex}
-		}
-		time.Sleep(time.Duration(HeartBeatDelay) * time.Millisecond)
-	}
-}
-
-/* On Win Handler. Responsibilities includes
- * - updating role of server to leader
- * - running heartbeat thread
- * - managing client requests (in progress)
- */
-func onWinChannelListener(
-	state *ServerState,
-	onWinChannel *chan bool,
-	serverStateLock *sync.Mutex,
-	appendEntriesCom *[8]AppendEntriesCom,
-	clientCommunicationChannel *chan KeyValue) {
-	//TODO: What if received message from new leader before onWinChannel gets to hear about it?
-	for {
-		select {
-		case <-* onWinChannel: // got enough votes
-			serverStateLock.Lock()
-			state.Role = LeaderRole
-			serverStateLock.Unlock()
-
-			// initialize leader state
-			var leaderState [ClusterSize]LeaderState
-			for i := 0; i < ClusterSize; i++ {
-				// Note that logentries are indexed from 1
-				leaderState[i] = LeaderState{len(state.Log) + 1, 0}
-			}
-
-			go runHeartbeatThread(state, appendEntriesCom) // Implements L1.
-			go readAndDistributeClientRequests(state, &leaderState, appendEntriesCom, clientCommunicationChannel)
-		}
 	}
 }
 
