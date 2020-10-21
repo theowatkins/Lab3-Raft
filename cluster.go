@@ -73,7 +73,7 @@ func startServer(
 	 * - process new log entries + heartbeats (empty logs)
 	 */
 	go func () {
-		for state.Role != LeaderRole {
+		for {
 			select {
 			case appendEntry := <-leaderCommunicationChannels[state.ServerId].message:
 				if appendEntry.Term >= state.CurrentTerm {
@@ -83,7 +83,9 @@ func startServer(
 					if isElection { //received message from leader during election,
 						isElection = false
 						serverStateLock.Lock()
-						state.Role = FollowerRole // for candidates that lost the election
+						if state.Role != LeaderRole {
+							state.Role = FollowerRole // for candidates that lost the election
+						}
 						serverStateLock.Unlock()
 					}
 
