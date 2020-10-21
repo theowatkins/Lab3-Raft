@@ -26,7 +26,7 @@ func readAndDistributeClientRequests(
 			state.lastApplied++
 
 			for serverIndex, leaderCommunicationChannel := range *appendEntriesCom {
-				go sendAppend(leaderCommunicationChannel, state, serverLeaderStates[serverIndex])
+				go sendAppendEntriesMessage(leaderCommunicationChannel, state, serverLeaderStates[serverIndex])
 			}
 		}
 	}
@@ -49,7 +49,7 @@ func readAndDistributeClientRequests(
 					} else {
 						// resend message with more logEntries on failure
 						serverLeaderStates[serverIndex].nextIndex -= 1
-						go sendAppend(leaderCommunicationChannel, state, serverLeaderStates[serverIndex])
+						go sendAppendEntriesMessage(leaderCommunicationChannel, state, serverLeaderStates[serverIndex])
 					}
 				default:
 					// do nothing
@@ -120,7 +120,7 @@ func onWinChannelListener(
 	}
 }
 
-func sendAppend(appendEntriesCom AppendEntriesCom, state *ServerState, leaderState LeaderState) {
+func sendAppendEntriesMessage(appendEntriesCom AppendEntriesCom, state *ServerState, leaderState LeaderState) {
 	appendEntriesCom.message <- AppendEntriesMessage {
 		// leader's term
 		state.CurrentTerm,
