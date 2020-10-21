@@ -92,19 +92,23 @@ func startServer(
 					printMessageFromLeader(state.ServerId, appendEntry)
 
 					if len(appendEntry.Entries) > 0 {
-						if appendEntry.PrevLogIndex < len(state.Log) && 
-						  state.Log[appendEntry.PrevLogIndex].Term == appendEntry.PrevLogTerm {
-
+						if appendEntry.PrevLogIndex == 0 {
+							fmt.Println(appendEntry.Entries)
+							for _, entry := range appendEntry.Entries{
+								state.Log = append(state.Log, entry)
+							}
+						} else if appendEntry.PrevLogIndex > len(state.Log) ||
+						  state.Log[appendEntry.PrevLogIndex - 1].Term != appendEntry.PrevLogTerm {
+							// respond to leader, apppend failed (need more entries)
+							leaderCommunicationChannels[state.ServerId].response <-AppendEntriesResponse{state.CurrentTerm, false, appendEntry}
+						} else {
 							// update log
 							for i, entry := range appendEntry.Entries{
-								state.Log = append(state.Log[:appendEntry.PrevLogIndex + i], entry)
+								state.Log = append(state.Log[:(appendEntry.PrevLogIndex - 1) + i], entry)
 							}
 
 							// respond to leader, append succeeded
 							leaderCommunicationChannels[state.ServerId].response <-AppendEntriesResponse{state.CurrentTerm, true, appendEntry}
-						} else {
-							// respond to leader, apppend failed (need more entries)
-							leaderCommunicationChannels[state.ServerId].response <-AppendEntriesResponse{state.CurrentTerm, false, appendEntry}
 						}
 					} else {
 						// do nothing for heartbeats
@@ -129,7 +133,8 @@ func startServer(
 			// initialize leader state
 			var leaderState [ClusterSize]LeaderState
 			for i:=0; i < ClusterSize; i++ {
-				leaderState[i] = LeaderState{len(state.Log), 0}
+				// Note that logentries are indexed from 1
+				leaderState[i] = LeaderState{len(state.Log) + 1, 0}
 			}
 
 			go runHeartbeatThread(state, leaderCommunicationChannels)
@@ -163,7 +168,6 @@ func runHeartbeatThread(
 				// leader's current commit index
 				state.commitIndex}
 		}
-		fmt.Println("sent") //breaks up prints into chunks for each beat.
 		time.Sleep(time.Duration(HeartBeatDelay) * time.Millisecond)
 	}
 }
@@ -236,7 +240,7 @@ func printMessageFromLeader(id int, append AppendEntriesMessage){
 		fmt.Println("Server ", id, " received new entry from ", append.LeaderId, ": ")
 		printMessage(append)
 	} else {
-		fmt.Println(id, " received heartbeat from ", append.LeaderId)
+		//fmt.Println(id, " received heartbeat from ", append.LeaderId)
 	}
 }
 
