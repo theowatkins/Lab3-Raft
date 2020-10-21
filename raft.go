@@ -18,13 +18,26 @@ func main() {
 	fmt.Print("Creating cluster...\n")
 	initCluster(clientCommunicationChannel, TestPersister{})
 
-	reader := bufio.NewReader(os.Stdin)
-
 	for {
-		fmt.Print("Enter Key, Value pair: ")
-		text, _ := reader.ReadString('\n')
-		pair := strings.Split(text, ",")
+		pair := promptForKeyValuePair(true)
 		clientCommunicationChannel <-KeyValue{pair[0], pair[1]}
 	}
+}
+
+func promptForKeyValuePair(loopUntilValid bool) []string {
+	pair := keyValuePrompt()
+	for len(pair) != 2 {
+		fmt.Print("Expected 2 elements received ", len(pair), " elements.")
+		pair = keyValuePrompt()
+	}
+	return pair
+}
+
+func keyValuePrompt() []string {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("Enter Key-Value pair (K,V): ")
+	text, _ := reader.ReadString('\n')
+	pair := strings.Split(text, ",")
+	return pair
 }
 

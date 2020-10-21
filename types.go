@@ -63,7 +63,7 @@ type AppendEntriesResponse struct {
 	message AppendEntriesMessage
 }
 
-type LeaderCom struct {
+type AppendEntriesCom struct {
 	/* Messages from client to cluster
 	 *
 	 */

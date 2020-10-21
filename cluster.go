@@ -10,7 +10,7 @@ import "time"
 const HeartBeatDelay = 500
 const ClusterSize = 8
 const ElectionTimeOut = 5 * 1000 // in milliseconds
-
+const debug = false ;
 type Vote struct {
 	Term int
 	VoteFor int
@@ -20,7 +20,7 @@ type Vote struct {
 func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) {
 
 	var voteChannels [ClusterSize]chan Vote
-	var leaderCommunicationChannel [ClusterSize]LeaderCom
+	var leaderCommunicationChannel [ClusterSize]AppendEntriesCom
 
 	previousLogEntries := initializeServerStateFromPersister(persister)
 
@@ -30,7 +30,7 @@ func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) 
 		state := ServerState{i, 0, -1, previousLogEntries, FollowerRole, 0,0}
 
 		voteChannels[i] = make(chan Vote)
-		leaderCommunicationChannel[i] = LeaderCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
+		leaderCommunicationChannel[i] = AppendEntriesCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
 
 		go startServer(&state, &voteChannels, &leaderCommunicationChannel, clientCommunicationChannel)
 	}
@@ -42,10 +42,10 @@ func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) 
 func startServer(
 	state *ServerState,
 	voteChannels *[ClusterSize]chan Vote,
-	leaderCommunicationChannels *[ClusterSize]LeaderCom,
+	appendEntriesCom *[ClusterSize]AppendEntriesCom,
 	clientCommunicationChannel chan KeyValue) {
 
-	isElection := false
+	isElection := true
 	electionThreadSleepTime := time.Millisecond * 1000
 	timeSinceLastUpdate := time.Now() //update includes election or message from leader
 	serverStateLock := new(sync.Mutex)
@@ -60,9 +60,13 @@ func startServer(
 			timeElapsed := time.Now().Sub(timeSinceLastUpdate)
 			if timeElapsed.Milliseconds() > ElectionTimeOut {
 				isElection = true
+			}
+
+			if isElection {
 				timeSinceLastUpdate = time.Now()
 				go elect(state, voteChannels, onWinChannel)
 			}
+
 			time.Sleep(electionThreadSleepTime)
 		}
 	}()
@@ -75,44 +79,16 @@ func startServer(
 	go func () {
 		for {
 			select {
-			case appendEntry := <-leaderCommunicationChannels[state.ServerId].message:
-				if appendEntry.Term >= state.CurrentTerm {
+			case appendEntryRequest := <-appendEntriesCom[state.ServerId].message:
+				if appendEntryRequest.Term >= state.CurrentTerm {
 					timeSinceLastUpdate = time.Now()
-					state.CurrentTerm = appendEntry.Term
-
+					state.CurrentTerm = appendEntryRequest.Term
 					if isElection { //received message from leader during election,
-						isElection = false
-						serverStateLock.Lock()
-						if state.Role != LeaderRole {
-							state.Role = FollowerRole // for candidates that lost the election
-						}
-						serverStateLock.Unlock()
+						onElectionEndHandler(&isElection, serverStateLock, state)
 					}
 
-					printMessageFromLeader(state.ServerId, appendEntry)
-
-					if len(appendEntry.Entries) > 0 {
-						if appendEntry.PrevLogIndex == 0 {
-							fmt.Println(appendEntry.Entries)
-							for _, entry := range appendEntry.Entries{
-								state.Log = append(state.Log, entry)
-							}
-						} else if appendEntry.PrevLogIndex > len(state.Log) ||
-						  state.Log[appendEntry.PrevLogIndex - 1].Term != appendEntry.PrevLogTerm {
-							// respond to leader, apppend failed (need more entries)
-							leaderCommunicationChannels[state.ServerId].response <-AppendEntriesResponse{state.CurrentTerm, false, appendEntry}
-						} else {
-							// update log
-							for i, entry := range appendEntry.Entries{
-								state.Log = append(state.Log[:(appendEntry.PrevLogIndex - 1) + i], entry)
-							}
-
-							// respond to leader, append succeeded
-							leaderCommunicationChannels[state.ServerId].response <-AppendEntriesResponse{state.CurrentTerm, true, appendEntry}
-						}
-					} else {
-						// do nothing for heartbeats
-					}
+					printMessageFromLeader(state.ServerId, appendEntryRequest)
+					processAppendEntryRequest(appendEntryRequest, state, appendEntriesCom)
 				}
 			}
 		}
@@ -123,7 +99,7 @@ func startServer(
 	 * - running heartbeat thread
 	 * - managing client requests (in progress)
 	 */
-	go func(){
+	go func() {
 		select {
 		case <-onWinChannel: // got enough votes
 			serverStateLock.Lock()
@@ -132,20 +108,55 @@ func startServer(
 
 			// initialize leader state
 			var leaderState [ClusterSize]LeaderState
-			for i:=0; i < ClusterSize; i++ {
+			for i := 0; i < ClusterSize; i++ {
 				// Note that logentries are indexed from 1
 				leaderState[i] = LeaderState{len(state.Log) + 1, 0}
 			}
 
-			go runHeartbeatThread(state, leaderCommunicationChannels)
-			go readAndDistributeClientRequests(state, &leaderState, leaderCommunicationChannels, clientCommunicationChannel)
+			go runHeartbeatThread(state, appendEntriesCom)
+			go readAndDistributeClientRequests(state, &leaderState, appendEntriesCom, clientCommunicationChannel)
 		}
 	}()
 }
 
+func onElectionEndHandler(isElection * bool, serverStateLock *sync.Mutex, state *ServerState) {
+	*isElection = false
+	serverStateLock.Lock()
+	if state.Role != LeaderRole {
+		state.Role = FollowerRole // for candidates that lost the election
+	}
+	serverStateLock.Unlock()
+}
+
+func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *ServerState, appendEntriesCom *[8]AppendEntriesCom) {
+	if len(appendEntryRequest.Entries) > 0 {
+		if appendEntryRequest.PrevLogIndex == 0 {
+			if state.ServerId == 0 {
+				fmt.Println("Appending to log", appendEntryRequest.Entries)
+			}
+
+			for _, entry := range appendEntryRequest.Entries {
+				state.Log = append(state.Log, entry)
+			}
+		} else if appendEntryRequest.PrevLogIndex > len(state.Log) ||
+			state.Log[appendEntryRequest.PrevLogIndex-1].Term != appendEntryRequest.PrevLogTerm {
+			// respond to leader, append failed (need more entries)
+			appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, false, appendEntryRequest}
+		} else {
+			// update log
+			for i, entry := range appendEntryRequest.Entries {
+				state.Log = append(state.Log[:(appendEntryRequest.PrevLogIndex-1)+i], entry)
+			}
+
+			// respond to leader, append succeeded
+			appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, true, appendEntryRequest}
+		}
+	}
+}
+
 func runHeartbeatThread(
 	state * ServerState, 
-	leaderCommunicationChannels *[ClusterSize]LeaderCom) {
+	leaderCommunicationChannels *[ClusterSize]AppendEntriesCom) {
 	for state.Role == LeaderRole {
 		for _, leaderCommunicationChannel := range *leaderCommunicationChannels {
 			leaderCommunicationChannel.message <- AppendEntriesMessage{
@@ -177,7 +188,7 @@ func runHeartbeatThread(
 func readAndDistributeClientRequests(
 	state * ServerState, 
 	leaderState *[ClusterSize]LeaderState,
-	leaderCommunicationChannels *[ClusterSize]LeaderCom,
+	leaderCommunicationChannels *[ClusterSize]AppendEntriesCom,
 	clientCommunicationChannel chan KeyValue) {
 
 	for state.Role == LeaderRole {
@@ -213,7 +224,7 @@ func readAndDistributeClientRequests(
 	}
 }
 
-func sendAppend(leaderCommunicationChannel LeaderCom, state *ServerState, leaderState LeaderState) {
+func sendAppend(leaderCommunicationChannel AppendEntriesCom, state *ServerState, leaderState LeaderState) {
 	leaderCommunicationChannel.message <- AppendEntriesMessage{
 		// leader's term
 		state.CurrentTerm,
@@ -238,7 +249,9 @@ func sendAppend(leaderCommunicationChannel LeaderCom, state *ServerState, leader
 func printMessageFromLeader(id int, append AppendEntriesMessage){
 	if len(append.Entries) > 0 {
 		fmt.Println("Server ", id, " received new entry from ", append.LeaderId, ": ")
-		printMessage(append)
+		if debug {
+			printMessage(append)
+		}
 	} else {
 		//fmt.Println(id, " received heartbeat from ", append.LeaderId)
 	}
