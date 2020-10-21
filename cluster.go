@@ -53,33 +53,15 @@ func startServer(
 	timeSinceLastUpdate := time.Now() //update includes election or message from leader
 	serverStateLock := new(sync.Mutex)
 	onWinChannel := make(chan bool)
-
-	/* Election Timer: Checks if timeout is surpassed and starts election. Timeout is reached when:
-	 * 1. no message from leader or
-	 * 2. when election took too long (e.g. due to tie / no leader elected)
-	 */
-	go func () {
-		for {
-			timeElapsed := time.Now().Sub(timeSinceLastUpdate)
-			if timeElapsed.Milliseconds() > ElectionTimeOut { //implements C4.
-				isElection = true
-			}
-
-			if isElection {
-				timeSinceLastUpdate = time.Now()
-				go elect(state, voteChannels, onWinChannel)
-			}
-
-			time.Sleep(electionThreadSleepTime)
-		}
-	}()
+	
+	go runElectionTimeoutThread(&timeSinceLastUpdate, &isElection, state, voteChannels, &onWinChannel, electionThreadSleepTime)
 
 	/* Handles messages from leader. Duties include:
 	* - ignore anything with stale term
 	 * - update timeSinceLastUpdate
 	 * - process new log entries + heartbeats (empty logs)
-	 */
-	go func () {
+	*/
+	go func() {
 		for {
 			select {
 			case appendEntryRequest := <-appendEntriesCom[state.ServerId].message:
@@ -122,6 +104,33 @@ func startServer(
 			go readAndDistributeClientRequests(state, &leaderState, appendEntriesCom, clientCommunicationChannel)
 		}
 	}()
+}
+
+/* Election Timer: Checks if timeout is surpassed and starts election. Timeout is reached when:
+ * 1. no message from leader or
+ * 2. when election took too long (e.g. due to tie / no leader elected)
+ */
+func runElectionTimeoutThread(
+	timeSinceLastUpdate * time.Time,
+	isElection * bool,
+	state * ServerState,
+	voteChannels *[8]chan Vote,
+	onWinChannel * chan bool,
+	electionThreadSleepTime time.Duration,
+	) {
+	for {
+		timeElapsed := time.Now().Sub(*timeSinceLastUpdate)
+		if timeElapsed.Milliseconds() > ElectionTimeOut { //implements C4.
+			*isElection = true
+		}
+
+		if *isElection {
+			*timeSinceLastUpdate = time.Now()
+			go elect(state, voteChannels, *onWinChannel)
+		}
+
+		time.Sleep(electionThreadSleepTime)
+	}
 }
 
 func onElectionEndHandler(isElection * bool, serverStateLock *sync.Mutex, state *ServerState) {
