@@ -48,38 +48,14 @@ func startServer(
 	appendEntriesCom *[ClusterSize]AppendEntriesCom,
 	clientCommunicationChannel chan KeyValue) {
 
-	isElection := true
+	isElection := false
 	electionThreadSleepTime := time.Millisecond * 1000
 	timeSinceLastUpdate := time.Now() //update includes election or message from leader
 	serverStateLock := new(sync.Mutex)
 	onWinChannel := make(chan bool)
-	
+
 	go runElectionTimeoutThread(&timeSinceLastUpdate, &isElection, state, voteChannels, &onWinChannel, electionThreadSleepTime)
-
-	/* Handles messages from leader. Duties include:
-	* - ignore anything with stale term
-	 * - update timeSinceLastUpdate
-	 * - process new log entries + heartbeats (empty logs)
-	*/
-	go func() {
-		for {
-			select {
-			case appendEntryRequest := <-appendEntriesCom[state.ServerId].message:
-				if appendEntryRequest.Term >= state.CurrentTerm {
-					timeSinceLastUpdate = time.Now()
-					state.CurrentTerm = appendEntryRequest.Term
-					if isElection { //received message from leader during election,
-						onElectionEndHandler(&isElection, serverStateLock, state)
-					}
-
-					printMessageFromLeader(state.ServerId, appendEntryRequest)
-					if state.Role != LeaderRole { //processed separately before all others
-						processAppendEntryRequest(appendEntryRequest, state, appendEntriesCom)
-					}
-				}
-			}
-		}
-	}()
+	go startLeaderListener(appendEntriesCom, state, &timeSinceLastUpdate, &isElection, serverStateLock)
 
 	/* On Win Handler. Responsibilities includes
 	 * - updating role of server to leader
@@ -104,6 +80,37 @@ func startServer(
 			go readAndDistributeClientRequests(state, &leaderState, appendEntriesCom, clientCommunicationChannel)
 		}
 	}()
+}
+
+/* Handles messages from leader. Duties include:
+* - ignore anything with stale term
+ * - update timeSinceLastUpdate
+ * - process new log entries + heartbeats (empty logs)
+*/
+func startLeaderListener(
+	appendEntriesCom * [8]AppendEntriesCom,
+	state * ServerState,
+	timeSinceLastUpdate * time.Time,
+	isElection * bool,
+	serverStateLock * sync.Mutex,
+	) {
+	for {
+		select {
+		case appendEntryRequest := <-appendEntriesCom[state.ServerId].message:
+			if appendEntryRequest.Term >= state.CurrentTerm {
+				*timeSinceLastUpdate = time.Now()
+				state.CurrentTerm = appendEntryRequest.Term
+				if *isElection { //received message from leader during election,
+					onElectionEndHandler(isElection, serverStateLock, state)
+				}
+
+				printMessageFromLeader(state.ServerId, appendEntryRequest)
+				if state.Role != LeaderRole { //processed separately before all others
+					processAppendEntryRequest(appendEntryRequest, state, appendEntriesCom)
+				}
+			}
+		}
+	}
 }
 
 /* Election Timer: Checks if timeout is surpassed and starts election. Timeout is reached when:
