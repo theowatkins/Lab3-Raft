@@ -58,7 +58,7 @@ func startServer(
 	go func () {
 		for {
 			timeElapsed := time.Now().Sub(timeSinceLastUpdate)
-			if timeElapsed.Milliseconds() > ElectionTimeOut {
+			if timeElapsed.Milliseconds() > ElectionTimeOut { //implements C4.
 				isElection = true
 				timeSinceLastUpdate = time.Now()
 				go elect(state, voteChannels, onWinChannel)
@@ -137,7 +137,7 @@ func startServer(
 				leaderState[i] = LeaderState{len(state.Log) + 1, 0}
 			}
 
-			go runHeartbeatThread(state, leaderCommunicationChannels)
+			go runHeartbeatThread(state, leaderCommunicationChannels) // Implements L1.
 			go readAndDistributeClientRequests(state, &leaderState, leaderCommunicationChannels, clientCommunicationChannel)
 		}
 	}()
@@ -290,6 +290,7 @@ func elect(
 			serverStateLock.Unlock()
 			voteRequest.Responses <- true
 		} else { // I already voted
+		} else { //implements RV1.
 			voteRequest.Responses <- false
 		}
 	}
@@ -314,7 +315,7 @@ func requestVotes(state * ServerState, voteChannels *[ClusterSize]chan Vote, onW
 		}
 	}
 
-	if votes >= ClusterSize/2 { // won election
+	if votes >= ClusterSize/2 { // implements c2.
 		fmt.Print("Server ", state.ServerId, " is the leader!\n\n")
 		onWinChannel <- true
 	} else {
