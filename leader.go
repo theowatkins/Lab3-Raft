@@ -82,13 +82,14 @@ func readAndDistributeClientRequests(
 		select {
 		case clientRequest := <-*clientCommunicationChannel:
 			fmt.Println("received entry from client.")
-			// Append to leader log
-			state.Log = append(state.Log, LogEntry{state.CurrentTerm, clientRequest})
-			state.lastApplied++
 
 			for serverIndex, leaderCommunicationChannel := range *appendEntriesCom {
 				go sendAppendEntriesMessage(leaderCommunicationChannel, state, serverLeaderStates[serverIndex])
 			}
+
+			//TODO: Leader should not commit to state until signal that majority received log entry
+			state.Log = append(state.Log, LogEntry{state.CurrentTerm, clientRequest})
+			state.lastApplied++
 		}
 	}
 
