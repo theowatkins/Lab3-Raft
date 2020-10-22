@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"sync"
 )
 import "time"
@@ -25,16 +24,22 @@ func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) 
 	var appendEntriesCom [ClusterSize]AppendEntriesCom
 
 	previousLogEntries := initializeServerStateFromPersister(persister)
+	lastCommittedIndex := len(previousLogEntries)
+	currentTerm := 0
+
+	if len(previousLogEntries) > 0 {
+		currentTerm = previousLogEntries[len(previousLogEntries)-1].Term
+	}
 
 	// Spawn 8 nodes (all followers to start)
-	for i := 0; i < ClusterSize; i++ {
+	for serverIndex := 0; serverIndex < ClusterSize; serverIndex++ {
 		// initialize state as followers
-		state := ServerState{i, 0, -1, previousLogEntries, FollowerRole, UndefinedIndex,UndefinedIndex}
+		state := ServerState{serverIndex, currentTerm, -1, previousLogEntries, FollowerRole, lastCommittedIndex,lastCommittedIndex}
 
-		voteChannels[i] = make(chan Vote)
-		appendEntriesCom[i] = AppendEntriesCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
+		voteChannels[serverIndex] = make(chan Vote)
+		appendEntriesCom[serverIndex] = AppendEntriesCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
 
-		go startServer(&state, &voteChannels, &appendEntriesCom, clientCommunicationChannel)
+		go startServer(&state, &voteChannels, &appendEntriesCom, clientCommunicationChannel, persister)
 	}
 }
 
@@ -45,7 +50,9 @@ func startServer(
 	state *ServerState,
 	voteChannels *[ClusterSize]chan Vote,
 	appendEntriesCom *[ClusterSize]AppendEntriesCom,
-	clientCommunicationChannel chan KeyValue) {
+	clientCommunicationChannel chan KeyValue,
+	persister Persister,
+	) {
 
 	isElection := true
 	electionThreadSleepTime := time.Millisecond * 1000
@@ -55,7 +62,7 @@ func startServer(
 
 	go runElectionTimeoutThread(&timeSinceLastUpdate, &isElection, state, voteChannels, &onWinChannel, electionThreadSleepTime)
 	go startLeaderListener(appendEntriesCom, state, &timeSinceLastUpdate, &isElection, serverStateLock)
-	go onWinChannelListener(state, &onWinChannel, serverStateLock, appendEntriesCom, &clientCommunicationChannel) //in leader.go
+	go onWinChannelListener(state, &onWinChannel, serverStateLock, appendEntriesCom, &clientCommunicationChannel, persister) //in leader.go
 }
 
 /* Election Timer: Checks if timeout is surpassed and starts election. Timeout is reached when:
@@ -86,7 +93,7 @@ func runElectionTimeoutThread(
 }
 
 /* Handles messages from leader. Duties include:
-* - ignore anything with stale term
+ * - ignore anything with stale term
  * - update timeSinceLastUpdate
  * - process new log entries + heartbeats (empty logs)
 */
@@ -108,7 +115,7 @@ func startLeaderListener(
 				}
 
 				printMessageFromLeader(state.ServerId, appendEntryRequest)
-				if state.Role != LeaderRole { //processed separately before all others
+				if state.Role != LeaderRole { //processed separately once consensus is reached
 					processAppendEntryRequest(appendEntryRequest, state, appendEntriesCom)
 				}
 			}
@@ -126,27 +133,43 @@ func onElectionEndHandler(isElection * bool, serverStateLock *sync.Mutex, state 
 }
 
 func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *ServerState, appendEntriesCom *[8]AppendEntriesCom) {
+	onFail := func () {
+		appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, false, appendEntryRequest}
+	}
+
+	onSuccess := func() {
+		appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, true, appendEntryRequest}
+	}
+
+	if appendEntryRequest.LeaderCommit > state.commitIndex { //implements AE5.
+		state.commitIndex = Min(appendEntryRequest.LeaderCommit, len(state.Log))
+	}
+
 	if len(appendEntryRequest.Entries) > 0 {
-		if appendEntryRequest.PrevLogIndex == 0 {
-			if state.ServerId == 0 {
-				fmt.Println("Server 0 appending ", len(appendEntryRequest.Entries), " entries to log")
-			}
 
-			for _, entry := range appendEntryRequest.Entries {
-				state.Log = append(state.Log, entry)
-			}
-		} else if appendEntryRequest.PrevLogIndex > len(state.Log) ||
-			state.Log[appendEntryRequest.PrevLogIndex-1].Term != appendEntryRequest.PrevLogTerm {
+		if state.CurrentTerm < appendEntryRequest.Term { //implements AE1.
+			onFail()
+			return
+		}
+
+		if appendEntryRequest.PrevLogIndex <= len(state.Log) { //implements AE3.
+			state.Log = append(state.Log[:appendEntryRequest.PrevLogIndex], appendEntryRequest.Entries...) //not shifting index because slice ignores upper bound
+			onSuccess()
+			return
+		}
+
+		if appendEntryRequest.PrevLogIndex > len(state.Log) ||
+			state.Log[appendEntryRequest.PrevLogIndex-1].Term != appendEntryRequest.PrevLogTerm { //implements AE2.
 			// respond to leader, append failed (need more entries)
-			appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, false, appendEntryRequest}
-		} else {
-			// update log
-			for i, entry := range appendEntryRequest.Entries {
-				state.Log = append(state.Log[:(appendEntryRequest.PrevLogIndex-1)+i], entry)
-			}
-
-			// respond to leader, append succeeded
-			appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, true, appendEntryRequest}
+			onFail()
+			return
 		}
 	}
+}
+
+func Min(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
 }
