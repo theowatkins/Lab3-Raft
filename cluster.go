@@ -28,7 +28,7 @@ func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) 
 	currentTerm := 0
 
 	if len(previousLogEntries) > 0 {
-		currentTerm = previousLogEntries[len(previousLogEntries)-1].Term //set to start new term
+		currentTerm = previousLogEntries[len(previousLogEntries)-1].Term
 	}
 
 	// Spawn 8 nodes (all followers to start)
