@@ -25,9 +25,7 @@ func CSVEntryAsLogEntry(logEntry []string) LogEntry {
 		log.Fatal("Row had too few or too many values:", len(logEntry))
 	}
 	term, err := strconv.Atoi(logEntry[0])
-	if err != nil {
-		log.Fatal("Entry term number could not parsed into a number: ", logEntry[0])
-	}
+	checkError("Entry term number could not parsed into a number: ", err)
 
 	logEntryContent := KeyValue{logEntry[1], logEntry[2]}
 	logEntryParsed := LogEntry{term, logEntryContent}
@@ -36,11 +34,9 @@ func CSVEntryAsLogEntry(logEntry []string) LogEntry {
 
 func readLogEntriesFromCSVFile(fileName string) []LogEntry {
 	var logEntries []LogEntry
-	csvFile, err := os.OpenFile(fileName,
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatalln("Couldn't open the csv file", err)
-	}
+	csvFile, err := os.Open(fileName)
+
+	checkError("Couldn't open the csv file", err)
 	r := csv.NewReader(csvFile)
 
 	// Iterate through the records
@@ -49,9 +45,7 @@ func readLogEntriesFromCSVFile(fileName string) []LogEntry {
 		if err == io.EOF {
 			break
 		}
-		if err != nil {
-			log.Fatal(err)
-		}
+		checkError("Error reading record in file:", err)
 
 		logEntry := CSVEntryAsLogEntry(record)
 		logEntries = append(logEntries, logEntry)
@@ -62,11 +56,8 @@ func readLogEntriesFromCSVFile(fileName string) []LogEntry {
 func addEntryToCSVFile(fileName string, row []string) {
 	file, err := os.OpenFile(fileName,
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Println(err)
-	}
 
-	checkError("Cannot create file", err)
+	checkError("Error opening file:", err)
 	defer file.Close()
 
 	writer := csv.NewWriter(file)
