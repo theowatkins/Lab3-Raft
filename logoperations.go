@@ -8,25 +8,43 @@ import (
 	"strconv"
 )
 
+const NumberOfFieldsInLogEntry = 3
+
+/* Responsible for:
+ * 1. Converting between LogEntry and format in log
+ * 2. Adding LogEntry to log
+ * 3. Reading and parsing log entry
+ */
+
 func logEntryAsCVSEntry(logEntry LogEntry) []string {
 	return []string{strconv.Itoa(logEntry.Term), logEntry.Content.Key, logEntry.Content.Value}
 }
 
+func CSVEntryAsLogEntry(logEntry []string) LogEntry {
+	if len(logEntry) != NumberOfFieldsInLogEntry {
+		log.Fatal("Row had too few or too many values:", len(logEntry))
+	}
+	term, err := strconv.Atoi(logEntry[0])
+	if err != nil {
+		log.Fatal("Entry term number could not parsed into a number: ", logEntry[0])
+	}
+
+	logEntryContent := KeyValue{logEntry[1], logEntry[2]}
+	logEntryParsed := LogEntry{term, logEntryContent}
+	return logEntryParsed
+}
+
 func readLogEntryCSVFile(fileName string) []LogEntry {
 	var logEntries []LogEntry
-	// Open the file
-	csvFile, err := os.Open(fileName)
+	csvFile, err := os.OpenFile(fileName,
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatalln("Couldn't open the csv file", err)
 	}
-
-	// Parse the file
 	r := csv.NewReader(csvFile)
-	//r := csv.NewReader(bufio.NewReader(csvFile))
 
 	// Iterate through the records
 	for {
-		// Read each record from csv
 		record, err := r.Read()
 		if err == io.EOF {
 			break
@@ -34,11 +52,8 @@ func readLogEntryCSVFile(fileName string) []LogEntry {
 		if err != nil {
 			log.Fatal(err)
 		}
-		term, err := strconv.Atoi(record[0])
-		key := record[1]
-		value := record[2]
-		logEntryContent := KeyValue{key, value}
-		logEntry := LogEntry{term, logEntryContent}
+
+		logEntry := CSVEntryAsLogEntry(record)
 		logEntries = append(logEntries, logEntry)
 	}
 	return logEntries
