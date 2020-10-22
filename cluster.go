@@ -24,11 +24,17 @@ func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) 
 	var appendEntriesCom [ClusterSize]AppendEntriesCom
 
 	previousLogEntries := initializeServerStateFromPersister(persister)
+	lastCommittedIndex := len(previousLogEntries)
+	currentTerm := 0
+
+	if len(previousLogEntries) > 0 {
+		currentTerm = previousLogEntries[len(previousLogEntries)-1].Term //set to start new term
+	}
 
 	// Spawn 8 nodes (all followers to start)
 	for i := 0; i < ClusterSize; i++ {
 		// initialize state as followers
-		state := ServerState{i, 0, -1, previousLogEntries, FollowerRole, UndefinedIndex,UndefinedIndex}
+		state := ServerState{i, currentTerm, -1, previousLogEntries, FollowerRole, lastCommittedIndex,lastCommittedIndex}
 
 		voteChannels[i] = make(chan Vote)
 		appendEntriesCom[i] = AppendEntriesCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
@@ -127,24 +133,43 @@ func onElectionEndHandler(isElection * bool, serverStateLock *sync.Mutex, state 
 }
 
 func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *ServerState, appendEntriesCom *[8]AppendEntriesCom) {
-	if len(appendEntryRequest.Entries) > 0 {
-		if appendEntryRequest.PrevLogIndex == 0 {
-			for _, entry := range appendEntryRequest.Entries {
-				state.Log = append(state.Log, entry)
-			}
-			appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, true, appendEntryRequest}
-		} else if appendEntryRequest.PrevLogIndex > len(state.Log) ||
-			state.Log[appendEntryRequest.PrevLogIndex-1].Term != appendEntryRequest.PrevLogTerm {
-			// respond to leader, append failed (need more entries)
-			appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, false, appendEntryRequest}
-		} else {
-			// update log
-			for i, entry := range appendEntryRequest.Entries {
-				state.Log = append(state.Log[:(appendEntryRequest.PrevLogIndex-1)+i], entry)
-			}
+	onFail := func () {
+		appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, false, appendEntryRequest}
+	}
 
-			// respond to leader, append succeeded
-			appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, true, appendEntryRequest}
+	onSuccess := func() {
+		appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, true, appendEntryRequest}
+	}
+
+	if appendEntryRequest.LeaderCommit > state.commitIndex { //implements AE5.
+		state.commitIndex = Min(appendEntryRequest.LeaderCommit, len(state.Log))
+	}
+
+	if len(appendEntryRequest.Entries) > 0 {
+
+		if state.CurrentTerm < appendEntryRequest.Term { //implements AE1.
+			onFail()
+			return
+		}
+
+		if appendEntryRequest.PrevLogIndex <= len(state.Log) { //implements AE3.
+			state.Log = append(state.Log[:appendEntryRequest.PrevLogIndex], appendEntryRequest.Entries...) //not shifting index because slice ignores upper bound
+			onSuccess()
+			return
+		}
+
+		if appendEntryRequest.PrevLogIndex > len(state.Log) ||
+			state.Log[appendEntryRequest.PrevLogIndex-1].Term != appendEntryRequest.PrevLogTerm { //implements AE2.
+			// respond to leader, append failed (need more entries)
+			onFail()
+			return
 		}
 	}
+}
+
+func Min(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
 }

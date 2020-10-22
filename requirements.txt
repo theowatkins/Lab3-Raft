@@ -1,16 +1,11 @@
 
 RPC Requirements:
     AppendEntries (AE):
-        AE1. Reply false if term < currentTerm
-            ! Replies not implemented.
-        AE2. Reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm
-            ! Replied not implemented.
-        AE3. If an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it
-            ! Not implemented.
-        AE4. Append any new entries not already in the log
-            ! Not implemented.
-        AE5. If leaderCommit > commitIndex set commitIndex = ming(leaderCommit, index of last entry)
-            ! Not implemented.
+        (DONE) AE1. Reply false if term < currentTerm
+        (DONE) AE2. Reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm
+        (DONE) AE3. If an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it
+        (DONE) AE4. Append any new entries not already in the log
+        (DONE) AE5. If leaderCommit > commitIndex set commitIndex = min(leaderCommit, index of last entry)
 
     Request Vote (RV):
         (DONE) RV1. Reply false if term < currentTerm
@@ -44,12 +39,7 @@ Requirements for Servers :
         (DONE) L1. Upon election: send initial empty AppendEntries RPCs (heartbeat ) to each server; repeat during idle periods to prevent election timeouts
         L2. If command received from client: append entry to local log, respond after entry applied to state machine
             ! Not implemented.
-        L3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex.
-            ! Not implemented.
-        L3.1 If successful: update nextIndex and matchIndex for follower
-            ! Not implemented.
-        L3.2 If AppendEntries fails because of log inconsistency: decrement nextIndex and retry
-            ! Not implemented.
+        (DONE) L3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex.
         L4. If there exists an N such that N > commitIndex, a majority of matchIndex[i] >= N, and log[N].term == currentTerm: set commitIndex = N
             ! Not implemented.
 

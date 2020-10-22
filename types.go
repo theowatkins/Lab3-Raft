@@ -113,7 +113,7 @@ type ServerState struct {
 	lastApplied int
 }
 
-type LeaderState struct {
+type ServerTermState struct {
 	/* For each server, index of the next log entry to send to that server.
 	 * Initialized to leader last log index + 1.
 	 */

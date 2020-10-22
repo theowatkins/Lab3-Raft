@@ -7,7 +7,7 @@ import "fmt"
  *
  * I couldn't download it but I imagined it would look something like this:
  */
-type LoadFunc func(id string, indexer interface{})
+type LoadFunc func(id string, indexer LogEntry)
 
 type Persister interface {
 	// Save is called to request persistent save of the indexer with id
@@ -22,8 +22,8 @@ type Persister interface {
 
 func initializeServerStateFromPersister(persister Persister) []LogEntry {
 	var logEntries []LogEntry
-	loadFunc := func(id string, logEntry interface{}){
-		//add logEntry to logEntries
+	loadFunc := func(id string, logEntry LogEntry){
+		logEntries = append(logEntries, logEntry)
 	}
 	loadError := persister.Load(loadFunc)
 	if loadError != nil {

@@ -13,7 +13,7 @@ import (
  * - managing client requests (in progress)
  */
 func onWinChannelListener(
-	state *ServerState,
+	leaderServerState *ServerState,
 	onWinChannel *chan bool,
 	serverStateLock *sync.Mutex,
 	appendEntriesCom *[8]AppendEntriesCom,
@@ -25,89 +25,96 @@ func onWinChannelListener(
 		select {
 		case <-* onWinChannel: // got enough votes
 			serverStateLock.Lock()
-			state.Role = LeaderRole
+			leaderServerState.Role = LeaderRole
 			serverStateLock.Unlock()
 
-			// initialize leader state
-			var leaderState [ClusterSize]LeaderState
+			// initialize leader leaderServerState
+			var leaderState [ClusterSize]ServerTermState
 			for i := 0; i < ClusterSize; i++ {
 				// Note that logentries are indexed from 1
-				leaderState[i] = LeaderState{len(state.Log) + 1, 0}
+				leaderState[i] = ServerTermState{len(leaderServerState.Log) + 1, 0}
 			}
 
-			go runHeartbeatThread(state, appendEntriesCom) // Implements L1.
-			go readAndDistributeClientRequests(state, &leaderState, appendEntriesCom, clientCommunicationChannel, persister)
+			go runHeartbeatThread(leaderServerState, appendEntriesCom) // Implements L1.
+			go readAndDistributeClientRequests(leaderServerState, &leaderState, appendEntriesCom, clientCommunicationChannel, persister)
 		}
 	}
 }
 
 func runHeartbeatThread(
-	state *ServerState,
+	leaderServerState *ServerState,
 	appendEntriesCom *[ClusterSize]AppendEntriesCom) {
-	for state.Role == LeaderRole {
+	for leaderServerState.Role == LeaderRole {
 		for _, leaderCommunicationChannel := range *appendEntriesCom {
 			leaderCommunicationChannel.message <- AppendEntriesMessage{
 				// leader's term
-				state.CurrentTerm,
+				leaderServerState.CurrentTerm,
 
 				// leader's ID
-				state.ServerId,
+				leaderServerState.ServerId,
 
 				// index of last entry in log
-				len(state.Log),
+				len(leaderServerState.Log),
 
 				// term of last entry in log
-				state.CurrentTerm,
+				leaderServerState.CurrentTerm,
 
 				// list of logentries to store
 				// ** empty for heartbeat **
 				[]LogEntry{},
 
 				// leader's current commit index
-				state.commitIndex}
+				leaderServerState.commitIndex}
 		}
 		time.Sleep(time.Duration(HeartBeatDelay) * time.Millisecond)
 	}
 }
 
 //TODO: update commitindex on majority
-//TODO: respond to client
 func readAndDistributeClientRequests(
-	state *ServerState,
-	serverLeaderStates *[ClusterSize]LeaderState,
+	leaderServerState *ServerState,
+	serverLeaderStates *[ClusterSize]ServerTermState,
 	appendEntriesCom *[ClusterSize]AppendEntriesCom,
 	clientCommunicationChannel *chan KeyValue,
 	persister Persister,
 	) {
 
 	censusedReachedChannel := make(chan bool)
-
 	nodesWithReplicatedEntry := 0
+	var currentLogEntry LogEntry
 	/* AppendEntriesRequest Handler
 	 * Distributes a client request to all servers in the system.
 	 */
 	go func () {
-		for state.Role == LeaderRole {
+		for leaderServerState.Role == LeaderRole {
 			select {
 			case clientRequest := <-*clientCommunicationChannel:
 
-				clientLogEntry := LogEntry{state.CurrentTerm, clientRequest}
-
-				for serverIndex, leaderCommunicationChannel := range *appendEntriesCom {
-					go sendAppendEntriesMessage(leaderCommunicationChannel, []LogEntry{clientLogEntry}, state, serverLeaderStates[serverIndex])
-				}
-
-				state.Log = append(state.Log, LogEntry{state.CurrentTerm, clientRequest})
-				state.lastApplied++
-
-				err := persister.Save(strconv.Itoa(len(state.Log)), clientLogEntry)
-				for err != nil { //retry until no error.
-					err = persister.Save(strconv.Itoa(len(state.Log)), clientLogEntry)
+				clientLogEntry := LogEntry{leaderServerState.CurrentTerm, clientRequest}
+				currentLogEntry = clientLogEntry
+				for _, leaderCommunicationChannel := range *appendEntriesCom {
+					go sendAppendEntriesMessage(
+						leaderCommunicationChannel,
+						[]LogEntry{clientLogEntry},
+						leaderServerState,
+						len(leaderServerState.Log),
+						leaderServerState.CurrentTerm,
+						)
 				}
 
 				<- censusedReachedChannel
-				state.commitIndex++
+
+				leaderServerState.Log = append(leaderServerState.Log, clientLogEntry)
+				leaderServerState.lastApplied++
+
+				err := persister.Save(strconv.Itoa(len(leaderServerState.Log)), clientLogEntry)
+				for err != nil { //retry until no error.
+					err = persister.Save(strconv.Itoa(len(leaderServerState.Log)), clientLogEntry)
+				}
+
+				leaderServerState.commitIndex++
 				nodesWithReplicatedEntry = 0 //clear count for next client requests
+				//TODO: Reply to client here to implement L2.
 			}
 		}
 	}()
@@ -121,14 +128,15 @@ func readAndDistributeClientRequests(
 			serverAppendEntriesCom := serverAppendEntriesCom
 			serverIndex := serverIndex
 			go func() {
-				for state.Role == LeaderRole {
+				for leaderServerState.Role == LeaderRole {
 					select {
 					case r := <-serverAppendEntriesCom.response:
 						// TODO: why does the paper say to respond with a term?!
 						if r.success {
-							// update matchIndex and nextIndex on successful appendEntry
+							// implements L3
 							serverLeaderStates[serverIndex].matchIndex = r.message.PrevLogIndex + len(r.message.Entries)
 							serverLeaderStates[serverIndex].nextIndex = serverLeaderStates[serverIndex].matchIndex + 1
+
 
 							/* nodesWithReplicatedEntry should only update if it is towards the majority.
 							 * Once reached it is clear by the client handler. Therefore, we not continue to update
@@ -144,17 +152,30 @@ func readAndDistributeClientRequests(
 								nodesWithReplicatedEntry++
 							}
 						} else {
-							fmt.Println("Error processing AppendEntries request: ", r.message)
+							fmt.Println("Server ", serverIndex, " had error processing AppendEntries request: ", r.message)
 							// resend message with more logEntries on failure
-							serverLeaderStates[serverIndex].nextIndex -= 1 //
-							nextIndexLog := state.Log[serverLeaderStates[serverIndex].nextIndex]
-							go sendAppendEntriesMessage(
-								serverAppendEntriesCom,
-								[]LogEntry{nextIndexLog},
-								state,
-								serverLeaderStates[serverIndex])
-						}
+							if serverLeaderStates[serverIndex].nextIndex > 1 {
+								serverLeaderStates[serverIndex].nextIndex -= 1 //
+							}
 
+							//implements L3
+							if len(leaderServerState.Log) >= serverLeaderStates[serverIndex].nextIndex {
+
+								nextIndexLog := leaderServerState.Log[serverLeaderStates[serverIndex].nextIndex-1]
+								prevLogIndex := serverLeaderStates[serverIndex].nextIndex-2
+								prevLogTerm := 0
+								if prevLogIndex > 0 && prevLogIndex <= len(leaderServerState.Log) {
+									prevLogTerm = leaderServerState.Log[prevLogIndex].Term
+								}
+								go sendAppendEntriesMessage(
+									serverAppendEntriesCom,
+									[]LogEntry{nextIndexLog},
+									leaderServerState,
+									prevLogIndex,
+									prevLogTerm,
+									)
+							}
+						}
 					}
 				}
 				fmt.Print("Leader stopped being a leader...\n")
@@ -168,21 +189,17 @@ func readAndDistributeClientRequests(
 func sendAppendEntriesMessage(
 	appendEntriesCom AppendEntriesCom,
 	entries []LogEntry,
-	state * ServerState,
-	leaderState LeaderState,
+	leaderServerState * ServerState,
+	prevLogIndex int,
+	prevLogTerm int,
 	) {
-	prevLogIndex := leaderState.nextIndex - 1
-	prevLogTerm := -1
-	if prevLogIndex >= 1 { //recall indexing starts at 1
-		prevLogTerm = state.Log[prevLogIndex].Term
-	}
 
 	appendEntriesCom.message <- AppendEntriesMessage {
 		// leader's term
-		state.CurrentTerm,
+		leaderServerState.CurrentTerm,
 
 		// leader's ID
-		state.ServerId,
+		leaderServerState.ServerId,
 
 		// index of previous entry in log
 		prevLogIndex,
@@ -195,5 +212,5 @@ func sendAppendEntriesMessage(
 		entries,
 
 		// leader's current commit index
-		state.commitIndex}
+		leaderServerState.commitIndex}
 }

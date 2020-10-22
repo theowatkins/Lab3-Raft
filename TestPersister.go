@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 )
 
 /* TestPersister is a testing library that writes to a file in a csv format.
@@ -38,7 +39,11 @@ func (t TestPersister) Save(id string, logEntry LogEntry) error {
  *
  */
 func (t TestPersister) Load(loadFunc LoadFunc) error {
-	*t.inMemoryLog = readLogEntriesFromCSVFile(TestLogFileName)
+	loadedLogEntries := readLogEntriesFromCSVFile(TestLogFileName)
+	*t.inMemoryLog = loadedLogEntries
+	for logEntryIndex, logEntry := range loadedLogEntries {
+		loadFunc(strconv.Itoa(logEntryIndex), logEntry)
+	}
 	fmt.Println("Loaded ", len(*t.inMemoryLog), " many entries from persistent state.")
 	return nil
 }
