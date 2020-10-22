@@ -40,8 +40,7 @@ Requirements for Servers :
         L2. If command received from client: append entry to local log, respond after entry applied to state machine
             ! Not implemented.
         (DONE) L3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex.
-        L4. If there exists an N such that N > commitIndex, a majority of matchIndex[i] >= N, and log[N].term == currentTerm: set commitIndex = N
-            ! Not implemented.
+        (DONE) L4. If there exists an N such that N > commitIndex, a majority of matchIndex[i] >= N, and log[N].term == currentTerm: set commitIndex = N
 
 Persistent State Requirements:
     (DONE) P1. save and restore persistent state from a Persister object (see persister.go)
