@@ -13,7 +13,7 @@ import (
 const TestLogFileName = "TestLog.csv" //the name of the log
 
 type TestPersister struct {
-	inMemoryLog * []LogEntry
+	inMemoryLog * []LogEntry //used to load and store list during normal operation. Used mostly for testing purposes.
 }
 
 func createTestPersister() TestPersister {
