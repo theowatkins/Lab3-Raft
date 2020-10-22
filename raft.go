@@ -19,12 +19,12 @@ func main() {
 	initCluster(clientCommunicationChannel, createTestPersister())
 
 	for {
-		pair := promptForKeyValuePair(true)
+		pair := promptForKeyValuePair()
 		clientCommunicationChannel <-KeyValue{pair[0], pair[1]}
 	}
 }
 
-func promptForKeyValuePair(loopUntilValid bool) []string {
+func promptForKeyValuePair() []string {
 	pair := keyValuePrompt()
 	for len(pair) != 2 {
 		fmt.Print("Expected 2 elements received ", len(pair), " elements.")

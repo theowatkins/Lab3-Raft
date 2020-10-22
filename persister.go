@@ -2,8 +2,6 @@ package main
 
 import "fmt"
 
-const StateFileName = "ApplicationState.txt"
-
 /* Had a lot of trouble finding persister.go libary. This is the as close as I got:
  * https://godoc.org/github.com/nedscode/memdb/persist#LoadFunc
  *
