@@ -13,7 +13,7 @@ type LoadFunc func(id string, indexer interface{})
 
 type Persister interface {
 	// Save is called to request persistent save of the indexer with id
-	Save(id string, indexer interface{}) error
+	Save(id string, entry LogEntry) error
 
 	// Load is called at create time to load all of the persisted items and call loadFunc with each
 	Load(loadFunc LoadFunc) error

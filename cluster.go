@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"sync"
 )
 import "time"
@@ -34,7 +33,7 @@ func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) 
 		voteChannels[i] = make(chan Vote)
 		appendEntriesCom[i] = AppendEntriesCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
 
-		go startServer(&state, &voteChannels, &appendEntriesCom, clientCommunicationChannel)
+		go startServer(&state, &voteChannels, &appendEntriesCom, clientCommunicationChannel, persister)
 	}
 }
 
@@ -45,7 +44,9 @@ func startServer(
 	state *ServerState,
 	voteChannels *[ClusterSize]chan Vote,
 	appendEntriesCom *[ClusterSize]AppendEntriesCom,
-	clientCommunicationChannel chan KeyValue) {
+	clientCommunicationChannel chan KeyValue,
+	persister Persister,
+	) {
 
 	isElection := true
 	electionThreadSleepTime := time.Millisecond * 1000
@@ -55,7 +56,7 @@ func startServer(
 
 	go runElectionTimeoutThread(&timeSinceLastUpdate, &isElection, state, voteChannels, &onWinChannel, electionThreadSleepTime)
 	go startLeaderListener(appendEntriesCom, state, &timeSinceLastUpdate, &isElection, serverStateLock)
-	go onWinChannelListener(state, &onWinChannel, serverStateLock, appendEntriesCom, &clientCommunicationChannel) //in leader.go
+	go onWinChannelListener(state, &onWinChannel, serverStateLock, appendEntriesCom, &clientCommunicationChannel, persister) //in leader.go
 }
 
 /* Election Timer: Checks if timeout is surpassed and starts election. Timeout is reached when:
@@ -128,10 +129,6 @@ func onElectionEndHandler(isElection * bool, serverStateLock *sync.Mutex, state 
 func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *ServerState, appendEntriesCom *[8]AppendEntriesCom) {
 	if len(appendEntryRequest.Entries) > 0 {
 		if appendEntryRequest.PrevLogIndex == 0 {
-			if state.ServerId == 0 {
-				fmt.Println("Server 0 appending ", len(appendEntryRequest.Entries), " entries to log")
-			}
-
 			for _, entry := range appendEntryRequest.Entries {
 				state.Log = append(state.Log, entry)
 			}
