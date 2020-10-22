@@ -16,8 +16,7 @@ func main() {
 	// 2. Spawn cluster
 	clientCommunicationChannel := make(chan KeyValue)
 	fmt.Print("Creating cluster...\n")
-	var logEntriesInSession []LogEntry
-	initCluster(clientCommunicationChannel, TestPersister{&logEntriesInSession})
+	initCluster(clientCommunicationChannel, createTestPersister())
 
 	for {
 		pair := promptForKeyValuePair(true)

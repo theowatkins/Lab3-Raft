@@ -144,6 +144,10 @@ func sendAppendEntriesMessage(
 	leaderState LeaderState,
 	) {
 	prevLogIndex := leaderState.nextIndex - 1
+	prevLogTerm := -1
+	if prevLogIndex >= 1 { //recall indexing starts at 1
+		prevLogTerm = state.Log[prevLogIndex].Term
+	}
 
 	appendEntriesCom.message <- AppendEntriesMessage {
 		// leader's term
@@ -156,7 +160,7 @@ func sendAppendEntriesMessage(
 		prevLogIndex,
 
 		// term of previous entry in log
-		state.Log[leaderState.nextIndex - 1].Term,
+		prevLogTerm,
 
 		// new LogEntries to store
 		// from nextIndex to end of log
