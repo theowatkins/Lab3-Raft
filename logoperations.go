@@ -34,7 +34,7 @@ func CSVEntryAsLogEntry(logEntry []string) LogEntry {
 	return logEntryParsed
 }
 
-func readLogEntryCSVFile(fileName string) []LogEntry {
+func readLogEntriesFromCSVFile(fileName string) []LogEntry {
 	var logEntries []LogEntry
 	csvFile, err := os.OpenFile(fileName,
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -59,7 +59,7 @@ func readLogEntryCSVFile(fileName string) []LogEntry {
 	return logEntries
 }
 
-func addEntryToFile(fileName string, row []string) {
+func addEntryToCSVFile(fileName string, row []string) {
 	file, err := os.OpenFile(fileName,
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {

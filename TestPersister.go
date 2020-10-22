@@ -4,7 +4,13 @@ import (
 	"fmt"
 )
 
-const TestLogFileName = "TestLog.csv"
+/* TestPersister is a testing library that writes to a file in a csv format.
+ * Each line corresponds to a LogEntry. Each line has three values"
+ * 1. Term
+ * 2. Key
+ * 3. Value
+ */
+const TestLogFileName = "TestLog.csv" //the name of the log
 
 type TestPersister struct {
 	inMemoryLog * []LogEntry
@@ -22,7 +28,7 @@ func createTestPersister() TestPersister {
  */
 func (t TestPersister) Save(id string, logEntry LogEntry) error {
 	*t.inMemoryLog = append(*t.inMemoryLog, logEntry)
-	addEntryToFile(TestLogFileName, logEntryAsCVSEntry(logEntry))
+	addEntryToCSVFile(TestLogFileName, logEntryAsCVSEntry(logEntry))
 	fmt.Println("saving log entry to persister. New entries this session: ", len(*t.inMemoryLog))
 
 	return nil
@@ -32,7 +38,7 @@ func (t TestPersister) Save(id string, logEntry LogEntry) error {
  *
  */
 func (t TestPersister) Load(loadFunc LoadFunc) error {
-	*t.inMemoryLog = readLogEntryCSVFile(TestLogFileName)
+	*t.inMemoryLog = readLogEntriesFromCSVFile(TestLogFileName)
 	fmt.Println("Loaded ", len(*t.inMemoryLog), " many entries from persistent state.")
 	return nil
 }
