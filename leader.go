@@ -123,7 +123,7 @@ func readAndDistributeClientRequests(
 				} // end implementation of L4
 
 				
-				for _, leaderCommunicationChannel := range *appendEntriesCom {
+				for serverIndex, leaderCommunicationChannel := range *appendEntriesCom {
 					
 					// implements L3
 					if len(leaderServerState.Log) >= serverLeaderStates[serverIndex].nextIndex {
