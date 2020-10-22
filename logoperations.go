@@ -54,8 +54,7 @@ func readLogEntriesFromCSVFile(fileName string) []LogEntry {
 }
 
 func addEntryToCSVFile(fileName string, row []string) {
-	file, err := os.OpenFile(fileName,
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
 	checkError("Error opening file:", err)
 	defer file.Close()

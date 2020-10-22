@@ -80,61 +80,89 @@ func readAndDistributeClientRequests(
 	persister Persister,
 	) {
 
+	censusedReachedChannel := make(chan bool)
+
+	nodesWithReplicatedEntry := 0
 	/* AppendEntriesRequest Handler
 	 * Distributes a client request to all servers in the system.
 	 */
-	for state.Role == LeaderRole {
-		select {
-		case clientRequest := <-*clientCommunicationChannel:
+	go func () {
+		for state.Role == LeaderRole {
+			select {
+			case clientRequest := <-*clientCommunicationChannel:
 
-			clientLogEntry := LogEntry{state.CurrentTerm, clientRequest}
+				clientLogEntry := LogEntry{state.CurrentTerm, clientRequest}
 
-			for serverIndex, leaderCommunicationChannel := range *appendEntriesCom {
-				go sendAppendEntriesMessage(leaderCommunicationChannel, []LogEntry{clientLogEntry}, state, serverLeaderStates[serverIndex])
-			}
+				for serverIndex, leaderCommunicationChannel := range *appendEntriesCom {
+					go sendAppendEntriesMessage(leaderCommunicationChannel, []LogEntry{clientLogEntry}, state, serverLeaderStates[serverIndex])
+				}
 
-			//TODO: Leader should not commit to state until signal that majority received log entry
-			state.Log = append(state.Log, LogEntry{state.CurrentTerm, clientRequest})
-			state.lastApplied++
-			err := persister.Save(strconv.Itoa(len(state.Log)), clientLogEntry)
-			for err != nil { //retry until no error.
-				err = persister.Save(strconv.Itoa(len(state.Log)), clientLogEntry)
+				state.Log = append(state.Log, LogEntry{state.CurrentTerm, clientRequest})
+				state.lastApplied++
+
+				err := persister.Save(strconv.Itoa(len(state.Log)), clientLogEntry)
+				for err != nil { //retry until no error.
+					err = persister.Save(strconv.Itoa(len(state.Log)), clientLogEntry)
+				}
+
+				<- censusedReachedChannel
+				state.commitIndex++
+				nodesWithReplicatedEntry = 0 //clear count for next client requests
 			}
 		}
-	}
+	}()
 
 	/* AppendEntriesResponse Handlers
 	 * For each server a goroutine is created that continuously reads AppendEntries resopnses
 	 */
-	for serverIndex, leaderCommunicationChannel := range *appendEntriesCom {
-		leaderCommunicationChannel := leaderCommunicationChannel
-		serverIndex := serverIndex
-		go func() {
-			for state.Role == LeaderRole {
-				select {
-				case r := <-leaderCommunicationChannel.response:
-					// TODO: why does the paper say to respond with a term?!
-					if r.success {
-						// update matchIndex and nextIndex on successful appendEntry
-						serverLeaderStates[serverIndex].matchIndex = r.message.PrevLogIndex + len(r.message.Entries)
-						serverLeaderStates[serverIndex].nextIndex = serverLeaderStates[serverIndex].matchIndex + 1
-					} else {
-						fmt.Println("Error processing AppendEntries request: ", r.message)
-						// resend message with more logEntries on failure
-						serverLeaderStates[serverIndex].nextIndex -= 1 //
-						nextIndexLog := state.Log[serverLeaderStates[serverIndex].nextIndex]
-						go sendAppendEntriesMessage(
-							leaderCommunicationChannel,
-							[]LogEntry{nextIndexLog},
-							state,
-							serverLeaderStates[serverIndex])
+	go func(){
+		newClientRequest := false
+		for serverIndex, serverAppendEntriesCom := range *appendEntriesCom {
+			serverAppendEntriesCom := serverAppendEntriesCom
+			serverIndex := serverIndex
+			go func() {
+				for state.Role == LeaderRole {
+					select {
+					case r := <-serverAppendEntriesCom.response:
+						// TODO: why does the paper say to respond with a term?!
+						if r.success {
+							// update matchIndex and nextIndex on successful appendEntry
+							serverLeaderStates[serverIndex].matchIndex = r.message.PrevLogIndex + len(r.message.Entries)
+							serverLeaderStates[serverIndex].nextIndex = serverLeaderStates[serverIndex].matchIndex + 1
+
+							/* nodesWithReplicatedEntry should only update if it is towards the majority.
+							 * Once reached it is clear by the client handler. Therefore, we not continue to update
+							 * it once the majority is reached
+							 */
+							if nodesWithReplicatedEntry >= ClusterSize / 2 && newClientRequest {
+								censusedReachedChannel <- true
+								newClientRequest = false
+							} else {
+								if nodesWithReplicatedEntry == 0 {
+									newClientRequest = true
+								}
+								nodesWithReplicatedEntry++
+							}
+						} else {
+							fmt.Println("Error processing AppendEntries request: ", r.message)
+							// resend message with more logEntries on failure
+							serverLeaderStates[serverIndex].nextIndex -= 1 //
+							nextIndexLog := state.Log[serverLeaderStates[serverIndex].nextIndex]
+							go sendAppendEntriesMessage(
+								serverAppendEntriesCom,
+								[]LogEntry{nextIndexLog},
+								state,
+								serverLeaderStates[serverIndex])
+						}
+
 					}
-				default:
-					// do nothing
 				}
-			}
-		}()
-	}
+				fmt.Print("Leader stopped being a leader...\n")
+			}()
+		}
+	}()
+
+	fmt.Println("Client listeners where launched successfully.")
 }
 
 func sendAppendEntriesMessage(

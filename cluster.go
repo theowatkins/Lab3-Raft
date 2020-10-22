@@ -132,6 +132,7 @@ func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *S
 			for _, entry := range appendEntryRequest.Entries {
 				state.Log = append(state.Log, entry)
 			}
+			appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, true, appendEntryRequest}
 		} else if appendEntryRequest.PrevLogIndex > len(state.Log) ||
 			state.Log[appendEntryRequest.PrevLogIndex-1].Term != appendEntryRequest.PrevLogTerm {
 			// respond to leader, append failed (need more entries)
