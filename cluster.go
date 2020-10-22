@@ -152,16 +152,16 @@ func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *S
 			return
 		}
 
+		if appendEntryRequest.PrevLogIndex <= len(state.Log) { //implements AE3.
+			state.Log = append(state.Log[:appendEntryRequest.PrevLogIndex], appendEntryRequest.Entries...) //not shifting index because slice ignores upper bound
+			onSuccess()
+			return
+		}
+
 		if appendEntryRequest.PrevLogIndex > len(state.Log) ||
 			state.Log[appendEntryRequest.PrevLogIndex-1].Term != appendEntryRequest.PrevLogTerm { //implements AE2.
 			// respond to leader, append failed (need more entries)
 			onFail()
-			return
-		}
-
-		if appendEntryRequest.PrevLogIndex <= len(state.Log) { //implements AE3 + AE4
-			state.Log = append(state.Log[:appendEntryRequest.PrevLogIndex], appendEntryRequest.Entries...) //not shifting index because slice ignores upper bound
-			onSuccess()
 			return
 		}
 	}
