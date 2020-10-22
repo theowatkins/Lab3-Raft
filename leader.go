@@ -92,20 +92,52 @@ func readAndDistributeClientRequests(
 
 				clientLogEntry := LogEntry{leaderServerState.CurrentTerm, clientRequest}
 				currentLogEntry = clientLogEntry
-				for _, leaderCommunicationChannel := range *appendEntriesCom {
-					go sendAppendEntriesMessage(
-						leaderCommunicationChannel,
-						[]LogEntry{clientLogEntry},
-						leaderServerState,
-						len(leaderServerState.Log),
-						leaderServerState.CurrentTerm,
-						)
-				}
-
-				<- censusedReachedChannel
 
 				leaderServerState.Log = append(leaderServerState.Log, clientLogEntry)
 				leaderServerState.lastApplied++
+
+				// implements L4
+				n := 0
+				count := 0
+
+				// get smallest N greater than commitIndex
+				for _, curState := range serverLeaderStates {
+					if curState.matchIndex > leaderServerState.commitIndex {
+						if n == 0 || curState.matchIndex < n {
+							n = curState.matchIndex
+						}
+					}
+				}
+
+				if n != 0 {
+					for _, curState := range serverLeaderStates {
+						if curState.matchIndex >= n {
+							count++
+						}
+					}
+				}
+
+				// on majority of matchIndex >= n, update commitIndex
+				if count > ClusterSize / 2 && leaderServerState.Log[n].Term == leaderServerState.CurrentTerm {
+					leaderServerState.commitIndex = n
+				} // end implementation of L4
+
+				
+				for _, leaderCommunicationChannel := range *appendEntriesCom {
+					
+					// implements L3
+					if len(leaderServerState.Log) >= serverLeaderStates[serverIndex].nextIndex {
+						go sendAppendEntriesMessage(
+							leaderCommunicationChannel,
+							[]LogEntry{clientLogEntry},
+							leaderServerState,
+							len(leaderServerState.Log),
+							leaderServerState.CurrentTerm,
+							)
+					}
+				}
+
+				<- censusedReachedChannel
 
 				err := persister.Save(strconv.Itoa(len(leaderServerState.Log)), clientLogEntry)
 				for err != nil { //retry until no error.
