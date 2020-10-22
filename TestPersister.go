@@ -30,7 +30,7 @@ func createTestPersister() TestPersister {
 func (t TestPersister) Save(id string, logEntry LogEntry) error {
 	*t.inMemoryLog = append(*t.inMemoryLog, logEntry)
 	addEntryToCSVFile(TestLogFileName, logEntryAsCVSEntry(logEntry))
-	fmt.Println("saving log entry to persister. New entries this session: ", len(*t.inMemoryLog))
+	fmt.Println("saving log entry to persister. New size of log: ", len(*t.inMemoryLog))
 
 	return nil
 }

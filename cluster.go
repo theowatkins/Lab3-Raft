@@ -32,12 +32,12 @@ func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) 
 	}
 
 	// Spawn 8 nodes (all followers to start)
-	for i := 0; i < ClusterSize; i++ {
+	for serverIndex := 0; serverIndex < ClusterSize; serverIndex++ {
 		// initialize state as followers
-		state := ServerState{i, currentTerm, -1, previousLogEntries, FollowerRole, lastCommittedIndex,lastCommittedIndex}
+		state := ServerState{serverIndex, currentTerm, -1, previousLogEntries, FollowerRole, lastCommittedIndex,lastCommittedIndex}
 
-		voteChannels[i] = make(chan Vote)
-		appendEntriesCom[i] = AppendEntriesCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
+		voteChannels[serverIndex] = make(chan Vote)
+		appendEntriesCom[serverIndex] = AppendEntriesCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
 
 		go startServer(&state, &voteChannels, &appendEntriesCom, clientCommunicationChannel, persister)
 	}
@@ -93,7 +93,7 @@ func runElectionTimeoutThread(
 }
 
 /* Handles messages from leader. Duties include:
-* - ignore anything with stale term
+ * - ignore anything with stale term
  * - update timeSinceLastUpdate
  * - process new log entries + heartbeats (empty logs)
 */
@@ -115,7 +115,7 @@ func startLeaderListener(
 				}
 
 				printMessageFromLeader(state.ServerId, appendEntryRequest)
-				if state.Role != LeaderRole { //processed separately before all others
+				if state.Role != LeaderRole { //processed separately once consensus is reached
 					processAppendEntryRequest(appendEntryRequest, state, appendEntriesCom)
 				}
 			}
