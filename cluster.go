@@ -59,12 +59,12 @@ func startServer(
 	onWinChannel := make(chan bool)
 
 	go runElectionTimeoutThread(&timeSinceLastUpdate, &isElection, state, voteChannels, &onWinChannel, electionThreadSleepTime)
-	go startLeaderListener(appendEntriesCom, state, &timeSinceLastUpdate, &isElection, serverStateLock)
+	go startLeaderListener(appendEntriesCom, state, &timeSinceLastUpdate, &isElection, serverStateLock) //implements F1.
 	go onWinChannelListener(state, &onWinChannel, serverStateLock, appendEntriesCom, &clientCommunicationChannel, persister, channel) //in leader.go
 
 	//creates raft object with closure
 	raft := Raft{}
-	raft.Start = func (logEntry LogEntry) (int, int, bool){
+	raft.Start = func (logEntry LogEntry) (int, int, bool){ //implements
 		go func () { //non blocking sent through client (leader may not be choosen yet).
 			clientCommunicationChannel <- logEntry.Content
 		}()
@@ -121,7 +121,7 @@ func startLeaderListener(
 		case appendEntryRequest := <-appendEntriesCom[state.ServerId].message:
 			if appendEntryRequest.Term >= state.CurrentTerm {
 				*timeSinceLastUpdate = time.Now()
-				state.CurrentTerm = appendEntryRequest.Term
+				state.CurrentTerm = appendEntryRequest.Term //implements AS2.
 				if *isElection { //received message from leader during election,
 					onElectionEndHandler(isElection, serverStateLock, state)
 				}

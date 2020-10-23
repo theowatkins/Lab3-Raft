@@ -17,13 +17,10 @@ Requirements for Servers :
     All Servers (AS):
         AS1. If commitIndex > lastApplied: increment lastApplied, apply log[lastApplied] to state machines.
             ! Not implemented.
-        AS2. If RPC request or response contains term T > currentTerm: setCurrentTerm = T, convert to follower
-            ! Not implemented.
+        (DONE) AS2. If RPC request or response contains term T > currentTerm: setCurrentTerm = T, convert to follower
 
     Followers (F):
-        F1. Respond to RPCs from candidates and leaders
-            A. AppendEntries response
-            (DONE) B. RequestVote response
+        (DONE) F1. Respond to RPCs from candidates and leaders
         (DONE) F2. If election timeout elapses without receiving AppendEntries from current leader or granting vote to candidate: convert to candidate
 
     Candidates (C):
@@ -37,15 +34,13 @@ Requirements for Servers :
 
     Leaders (L):
         (DONE) L1. Upon election: send initial empty AppendEntries RPCs (heartbeat ) to each server; repeat during idle periods to prevent election timeouts
-        L2. If command received from client: append entry to local log, respond after entry applied to state machine
-            ! Not implemented.
-        (DONE) L3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex.
+        (DONE) L2. If command received from client: append entry to local log, respond after entry applied to state machine
+        L3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex.
         (DONE) L4. If there exists an N such that N > commitIndex, a majority of matchIndex[i] >= N, and log[N].term == currentTerm: set commitIndex = N
 
 Persistent State Requirements:
     (DONE) P1. save and restore persistent state from a Persister object (see persister.go)
-     P2. Whoever calls Raft.Make() supplies a Persister that initially holds Raft's most recently persisted state (if any)
-        ! Raft.Make Not implemented.
+    (DONE) Whoever calls Raft.Make() supplies a Persister that initially holds Raft's most recently persisted state (if any)
     (DONE) P3. Raft should initialize its state from that Persister, and should use it to save its persistent state each
 
 

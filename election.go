@@ -38,7 +38,7 @@ func elect(
 	 * If vote request contains a future term, then vote is confirmed and CurrentTerm updated to reject any
 	 * other candidate running in the same term.
 	 */
-	case voteRequest := <-(*voteChannels)[state.ServerId]: //
+	case voteRequest := <-(*voteChannels)[state.ServerId]: //implements F1.
 		serverStateLock.Lock()
 		if voteRequest.Term > state.CurrentTerm { // I haven't voted yet (noted by stale term)
 			state.CurrentTerm = voteRequest.Term
