@@ -125,7 +125,7 @@ func TestDatabasePut(t *testing.T) {
 	db := new(Database)
 	db.New(40)
 	db.Put("aasdfasdfasbc", "value")
-	time.Sleep(time.Second * 10)
+	time.Sleep(time.Second * 2) //allows servers to print their status
 }
 
 /* Testing Utility Functions
