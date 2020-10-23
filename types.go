@@ -124,3 +124,16 @@ type ServerTermState struct {
 	 */
 	matchIndex int
 }
+
+type Vote struct {
+	Term int
+	VoteFor int
+	Responses chan VoteResponse
+	LastLogIndex int
+	LastLogTerm int
+}
+
+type VoteResponse struct {
+	GotVote bool
+	Term int
+}
