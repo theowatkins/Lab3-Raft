@@ -49,14 +49,24 @@ func elect(
 	 */
 	case voteRequest := <-(*voteChannels)[state.ServerId]: //implements F1.
 		serverStateLock.Lock()
-		lastLogIndex := len(state.Log)
-		lastLogTerm := state.Log[lastLogIndex-1].Term
-		if voteRequest.Term > state.CurrentTerm && //implements RV2.
-			voteRequest.LastLogIndex == len(state.Log) &&
-			voteRequest.LastLogTerm == lastLogTerm{
-			voteRequest.Responses <- true
-		} else { //implements RV1.
-			voteRequest.Responses <- false
+		if state.VotedFor < 0 || state.VotedFor == voteRequest.VoteFor {
+			// if votedFor is null or candidateId
+			var lastLogTerm int
+			lastLogTerm = 0
+			lastLogIndex := len(state.Log)
+			if lastLogIndex > 0 {
+				lastLogTerm = state.Log[voteRequest.LastLogIndex-1].Term
+			}
+
+			if voteRequest.Term > state.CurrentTerm && //implements RV2.
+				voteRequest.LastLogIndex >= lastLogIndex &&
+				voteRequest.LastLogTerm == lastLogTerm{
+				// candidates log is at least as up-to-date as receiver's log
+				state.VotedFor = voteRequest.VoteFor
+				voteRequest.Responses <- true
+			} else { //implements RV1.
+				voteRequest.Responses <- false
+			}
 		}
 	}
 }
@@ -65,8 +75,13 @@ func requestVotes(state *ServerState, voteChannels *[ClusterSize]chan Vote, onWi
 	// send vote requests to other servers
 	//TODO: What if one of the servers is down -- then this will hang forever
 	responses := make(chan bool)
+	var candidateLastLogTerm int
+	candidateLastLogTerm = 0
 	candidateLastLogIndex := len(state.Log)
-	candidateLastLogTerm := state.Log[candidateLastLogIndex-1].Term
+	if candidateLastLogIndex > 0 {
+		candidateLastLogTerm = state.Log[candidateLastLogIndex-1].Term
+	}
+	
 	for i, c := range *voteChannels {
 		if i != state.ServerId {
 			c <- Vote{state.CurrentTerm, state.ServerId, responses, candidateLastLogIndex, candidateLastLogTerm}
