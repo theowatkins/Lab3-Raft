@@ -27,8 +27,7 @@ Requirements for Servers :
         C1. On conversion to candidate, start election. Includes: increment current term, vote for self, reset election timer, send RequestVote RPC to all other servers
             ! Missing resetting election timer
         (DONE) C2. If votes received from majority of serves: become leader
-        C3. If AppendEntries RPC received from new leader: convert to follower
-            ! Missing check if RPC from leader to leader.
+        (DONE) C3. If AppendEntries RPC received from new leader: convert to follower
         (DONE) C4. If election timeout elapses: start new election
 
 
