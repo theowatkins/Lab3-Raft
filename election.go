@@ -34,7 +34,7 @@ func elect(
 
 		time.Sleep(time.Duration(timeUntilElectionStart) * time.Millisecond) //reset election timer
 
-		//continue elections until you win or turn into a follower
+		//continue elections until you win or turn into a follower when leader sends heartbeats
 		for state.Role == CandidateRole {
 			serverStateLock.Lock()
 			state.CurrentTerm++
