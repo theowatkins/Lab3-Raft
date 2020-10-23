@@ -8,7 +8,7 @@ import (
 )
 
 func TestInitialization(t *testing.T) {
-	ch := new(CircularHash)
+	ch := new(CircleHash)
 	numberOfServers := 1
 	numberVirtualNodesPerServer := 1
 	ch.New(numberOfServers, numberVirtualNodesPerServer)
@@ -21,7 +21,7 @@ func TestInitialization(t *testing.T) {
 }
 
 func TestAddNode(t *testing.T) {
-	ch := new(CircularHash)
+	ch := new(CircleHash)
 	numberOfServers := 1
 	numberVirtualNodesPerServer := 1
 	numberServerPositions := 4
@@ -41,7 +41,7 @@ func TestAddNode(t *testing.T) {
 }
 
 func TestAddNodeTwice(t *testing.T) {
-	ch := new(CircularHash)
+	ch := new(CircleHash)
 	numberOfServers := 1
 	numberVirtualNodesPerServer := 1
 	numberServerPositions := 6
@@ -68,7 +68,7 @@ func TestAddNodeTwice(t *testing.T) {
 }
 
 func TestAddNodeTwiceThenRemove(t *testing.T) {
-	ch := new(CircularHash)
+	ch := new(CircleHash)
 	numberOfServers := 1
 	numberVirtualNodesPerServer := 1
 
@@ -89,7 +89,7 @@ func TestAddNodeTwiceThenRemove(t *testing.T) {
 }
 
 func TestGetServerWithPosition(t *testing.T) {
-	ch := new(CircularHash)
+	ch := new(CircleHash)
 	ch.New(1, 1)
 	ch.AddNode()
 	ch.AddNode()
@@ -103,7 +103,7 @@ func TestGetServerWithPosition(t *testing.T) {
 }
 
 func TestGetServerWithKey(t *testing.T) {
-	ch := new(CircularHash)
+	ch := new(CircleHash)
 	ch.New(1, 1)
 	ch.AddNode()
 	ch.AddNode()
@@ -132,7 +132,7 @@ func TestDatabasePut(t *testing.T) {
  *
  */
 
-func testPositions(expected []float64, ch * CircularHash, t *testing.T){
+func testPositions(expected []float64, ch *CircleHash, t *testing.T){
 	for positionIndex := 0; positionIndex < len(expected); positionIndex++ {
 		runIdentifiers := fmt.Sprintf("pos%d", positionIndex)
 		position := ch.serverPositions[positionIndex].position
@@ -140,7 +140,7 @@ func testPositions(expected []float64, ch * CircularHash, t *testing.T){
 	}
 }
 
-func testServerPositions(expected []int, ch * CircularHash, t *testing.T){
+func testServerPositions(expected []int, ch *CircleHash, t *testing.T){
 	for positionIndex := 0; positionIndex < len(expected); positionIndex++ {
 		runIdentifiers := fmt.Sprintf("pos%d", positionIndex)
 		serverAtPosition := ch.serverPositions[positionIndex].serverIndex

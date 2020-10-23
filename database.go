@@ -10,13 +10,13 @@ import (
  *
  */
 type Database struct {
-	ch * CircularHash
+	ch *CircleHash
 	servers * []DatabaseServer
 }
 const numberOfReplicas = 2
 
 func (db * Database) New (numberOfNodes int) {
-	ch := new(CircularHash)
+	ch := new(CircleHash)
 	numberVirtualNodesPerServer := 1
 
 	ch.New(numberOfNodes, numberVirtualNodesPerServer)
