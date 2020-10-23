@@ -34,7 +34,7 @@ func CSVEntryAsLogEntry(logEntry []string) LogEntry {
 
 func readLogEntriesFromCSVFile(fileName string) []LogEntry {
 	var logEntries []LogEntry
-	csvFile, err := os.Open(fileName)
+	csvFile, err := os.OpenFile(fileName, os.O_CREATE, 0666)
 
 	checkError("Couldn't open the csv file", err)
 	r := csv.NewReader(csvFile)
