@@ -19,6 +19,7 @@ func onWinChannelListener(
 	appendEntriesCom *[8]AppendEntriesCom,
 	clientCommunicationChannel *chan KeyValue,
 	persister Persister,
+	channel ApplyChannel,
 	) {
 	//TODO: What if received message from new leader before onWinChannel gets to hear about it?
 	for {
@@ -36,7 +37,7 @@ func onWinChannelListener(
 			}
 
 			go runHeartbeatThread(leaderServerState, appendEntriesCom) // Implements L1.
-			go readAndDistributeClientRequests(leaderServerState, &leaderState, appendEntriesCom, clientCommunicationChannel, persister)
+			go readAndDistributeClientRequests(leaderServerState, &leaderState, appendEntriesCom, clientCommunicationChannel, persister, channel)
 		}
 	}
 }
@@ -77,6 +78,7 @@ func readAndDistributeClientRequests(
 	appendEntriesCom *[ClusterSize]AppendEntriesCom,
 	clientCommunicationChannel *chan KeyValue,
 	persister Persister,
+	channel ApplyChannel,
 	) {
 
 	censusedReachedChannel := make(chan bool)
@@ -137,7 +139,10 @@ func readAndDistributeClientRequests(
 
 				leaderServerState.commitIndex++
 				nodesWithReplicatedEntry = 0 //clear count for next client requests
-				//TODO: Reply to client here to implement L2.
+				channel <- ApplyMessage {
+					term:     leaderServerState.CurrentTerm,
+					logEntry: clientLogEntry,
+				}
 			}
 		}
 	}()

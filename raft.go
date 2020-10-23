@@ -15,13 +15,65 @@ func main() {
 
 	// 2. Spawn cluster
 	clientCommunicationChannel := make(chan KeyValue)
+	applyChannel := make(ApplyChannel)
 	fmt.Print("Creating cluster...\n")
-	initCluster(clientCommunicationChannel, createTestPersister())
+	initCluster(clientCommunicationChannel, createTestPersister(), applyChannel)
 
 	for {
 		pair := promptForKeyValuePair()
 		clientCommunicationChannel <-KeyValue{pair[0], pair[1]}
 	}
+}
+
+type Raft struct {
+	Start func(logEntry LogEntry) (int, int, bool) // returns index, term, isLeader
+	GetState func () (int, bool)
+}
+
+
+type ApplyMessage struct {
+	term int
+	logEntry LogEntry
+}
+
+type ApplyChannel = chan ApplyMessage
+
+type NetworkIdentifiers struct {
+	voteChannels *[ClusterSize]chan Vote
+	appendEntriesCom *[ClusterSize]AppendEntriesCom
+	clientCommunicationChannel chan KeyValue
+}
+
+func MakeRaft(
+	peers NetworkIdentifiers,
+	meIndex int,
+	persister Persister,
+	applyChannel ApplyChannel) Raft {
+
+	previousLogEntries := initializeServerStateFromPersister(persister)
+	lastCommittedIndex := len(previousLogEntries)
+	currentTerm := 0
+
+	if len(previousLogEntries) > 0 {
+		currentTerm = previousLogEntries[len(previousLogEntries)-1].Term
+	}
+
+	raftState := ServerState{
+		meIndex,
+		currentTerm,
+		-1,
+		previousLogEntries,
+	FollowerRole,
+	lastCommittedIndex,
+	lastCommittedIndex}
+
+	return startServer(
+		&raftState,
+		peers.voteChannels,
+		peers.appendEntriesCom,
+		peers.clientCommunicationChannel,
+		persister,
+		applyChannel)
 }
 
 func promptForKeyValuePair() []string {
