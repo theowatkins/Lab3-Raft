@@ -81,7 +81,6 @@ func readAndDistributeClientRequests(
 	channel ApplyChannel,
 	) {
 
-	censusedReachedChannel := make(chan bool)
 	nodesWithReplicatedEntry := 0
 	/* AppendEntriesRequest Handler
 	 * Distributes a client request to all servers in the system.
@@ -95,7 +94,7 @@ func readAndDistributeClientRequests(
 			// get smallest N greater than commitIndex
 			for _, curState := range serverLeaderStates {
 				if curState.matchIndex > leaderServerState.commitIndex {
-					if n == 0 || curState.matchIndex < n {
+					if curState.matchIndex < n {
 						n = curState.matchIndex
 					}
 				}
@@ -129,9 +128,7 @@ func readAndDistributeClientRequests(
 						serverLeaderStates, 
 						leaderServerState)
 				}
-
-				<- censusedReachedChannel
-
+				//TODO: Save only when committed
 				err := persister.Save(strconv.Itoa(len(leaderServerState.Log)), clientLogEntry)
 				for err != nil { //retry until no error.
 					err = persister.Save(strconv.Itoa(len(leaderServerState.Log)), clientLogEntry)
@@ -139,10 +136,12 @@ func readAndDistributeClientRequests(
 
 				leaderServerState.commitIndex++
 				nodesWithReplicatedEntry = 0 //clear count for next client requests
-				channel <- ApplyMessage {
-					term:     leaderServerState.CurrentTerm,
-					logEntry: clientLogEntry,
-				}
+				go func() { //send when channel is ready
+					channel <- ApplyMessage {
+						term:     leaderServerState.CurrentTerm,
+						logEntry: clientLogEntry,
+					}
+				}()
 			}
 		}
 	}()
