@@ -2,6 +2,7 @@ package main
 
 import (
 	"sync"
+	"fmt"
 )
 import "time"
 
@@ -113,10 +114,11 @@ func startLeaderListener(
 				if *isElection { //received message from leader during election,
 					onElectionEndHandler(isElection, serverStateLock, state)
 				}
-
+				
 				printMessageFromLeader(state.ServerId, appendEntryRequest)
-				if state.Role != LeaderRole { //processed separately once consensus is reached
+				if state.Role != LeaderRole && len(appendEntryRequest.Entries) != 0 {
 					processAppendEntryRequest(appendEntryRequest, state, appendEntriesCom)
+					fmt.Println("Server ", state.ServerId, "'s current log: ", state.Log)
 				}
 			}
 		}
@@ -145,25 +147,24 @@ func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *S
 		state.commitIndex = Min(appendEntryRequest.LeaderCommit, len(state.Log))
 	}
 
-	if len(appendEntryRequest.Entries) > 0 {
+	var termCompare int
+	if appendEntryRequest.PrevLogIndex == 0 {
+		termCompare = -1
+	} else {
+		termCompare = state.Log[appendEntryRequest.PrevLogIndex - 1].Term
+	}
 
-		if state.CurrentTerm < appendEntryRequest.Term { //implements AE1.
-			onFail()
-			return
-		}
-
-		if appendEntryRequest.PrevLogIndex <= len(state.Log) { //implements AE3.
-			state.Log = append(state.Log[:appendEntryRequest.PrevLogIndex], appendEntryRequest.Entries...) //not shifting index because slice ignores upper bound
-			onSuccess()
-			return
-		}
-
-		if appendEntryRequest.PrevLogIndex > len(state.Log) ||
-			state.Log[appendEntryRequest.PrevLogIndex-1].Term != appendEntryRequest.PrevLogTerm { //implements AE2.
-			// respond to leader, append failed (need more entries)
-			onFail()
-			return
-		}
+	if state.CurrentTerm < appendEntryRequest.Term { //implements AE1.
+		onFail()
+		return
+	} else if appendEntryRequest.PrevLogIndex <= len(state.Log) && appendEntryRequest.PrevLogTerm == termCompare { //implements AE3.
+		state.Log = append(state.Log[:appendEntryRequest.PrevLogIndex], appendEntryRequest.Entries...) //not shifting index because slice ignores upper bound
+		onSuccess()
+		return
+	} else { //implements AE2.
+		// respond to leader, append failed (need more entries)
+		onFail()
+		return
 	}
 }
 

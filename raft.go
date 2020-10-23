@@ -35,7 +35,7 @@ func promptForKeyValuePair() []string {
 
 func keyValuePrompt() []string {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("Enter Key-Value pair (K,V): ")
+	fmt.Println("Enter Key-Value pair: K,V: ")
 	text, _ := reader.ReadString('\n')
 	pair := strings.Split(text, ",")
 	return pair
