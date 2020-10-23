@@ -18,29 +18,26 @@ type Vote struct {
 
 const UndefinedIndex = -1
 
-func initCluster(clientCommunicationChannel chan KeyValue, persister Persister) {
+func initCluster(clientCommunicationChannel chan KeyValue, persister Persister, applyChannel ApplyChannel) NetworkIdentifiers {
 
 	var voteChannels [ClusterSize]chan Vote
 	var appendEntriesCom [ClusterSize]AppendEntriesCom
 
-	previousLogEntries := initializeServerStateFromPersister(persister)
-	lastCommittedIndex := len(previousLogEntries)
-	currentTerm := 0
-
-	if len(previousLogEntries) > 0 {
-		currentTerm = previousLogEntries[len(previousLogEntries)-1].Term
-	}
-
 	// Spawn 8 nodes (all followers to start)
 	for serverIndex := 0; serverIndex < ClusterSize; serverIndex++ {
-		// initialize state as followers
-		state := ServerState{serverIndex, currentTerm, -1, previousLogEntries, FollowerRole, lastCommittedIndex,lastCommittedIndex}
-
 		voteChannels[serverIndex] = make(chan Vote)
 		appendEntriesCom[serverIndex] = AppendEntriesCom{make(chan AppendEntriesMessage), make(chan AppendEntriesResponse)}
-
-		go startServer(&state, &voteChannels, &appendEntriesCom, clientCommunicationChannel, persister)
 	}
+
+	networkIdentifiers := NetworkIdentifiers{}
+	networkIdentifiers.voteChannels = &voteChannels
+	networkIdentifiers.appendEntriesCom = &appendEntriesCom
+	networkIdentifiers.clientCommunicationChannel = clientCommunicationChannel
+
+	for serverIndex := 0; serverIndex < ClusterSize; serverIndex++ {
+		MakeRaft(networkIdentifiers, serverIndex, persister, applyChannel)
+	}
+	return networkIdentifiers
 }
 
 /* Creates a server in the cluster. Structured via https://pdos.csail.mit.edu/6.824/labs/raft-structure.txt
@@ -52,7 +49,8 @@ func startServer(
 	appendEntriesCom *[ClusterSize]AppendEntriesCom,
 	clientCommunicationChannel chan KeyValue,
 	persister Persister,
-	) {
+	channel ApplyChannel,
+	) Raft {
 
 	isElection := true
 	electionThreadSleepTime := time.Millisecond * 1000
@@ -62,7 +60,21 @@ func startServer(
 
 	go runElectionTimeoutThread(&timeSinceLastUpdate, &isElection, state, voteChannels, &onWinChannel, electionThreadSleepTime)
 	go startLeaderListener(appendEntriesCom, state, &timeSinceLastUpdate, &isElection, serverStateLock)
-	go onWinChannelListener(state, &onWinChannel, serverStateLock, appendEntriesCom, &clientCommunicationChannel, persister) //in leader.go
+	go onWinChannelListener(state, &onWinChannel, serverStateLock, appendEntriesCom, &clientCommunicationChannel, persister, channel) //in leader.go
+
+	//creates raft object with closure
+	raft := Raft{}
+	raft.Start = func (logEntry LogEntry) (int, int, bool){
+		go func () { //non blocking sent through client (leader may not be choosen yet).
+			clientCommunicationChannel <- logEntry.Content
+		}()
+		return len(state.Log), state.CurrentTerm, state.Role == LeaderRole
+	}
+
+	raft.GetState = func ()(int, bool) {
+		return state.CurrentTerm, state.Role == LeaderRole
+	}
+	return raft
 }
 
 /* Election Timer: Checks if timeout is surpassed and starts election. Timeout is reached when:
