@@ -127,7 +127,7 @@ func startLeaderListener(
 				}
 				
 				printMessageFromLeader(state.ServerId, appendEntryRequest)
-				if state.Role != LeaderRole && len(appendEntryRequest.Entries) != 0 { //implements C3.
+				if state.Role != LeaderRole && len(appendEntryRequest.Entries) != 0 {
 					processAppendEntryRequest(appendEntryRequest, state, appendEntriesCom)
 					fmt.Println("Server ", state.ServerId, "'s current log: ", state.Log)
 				}
