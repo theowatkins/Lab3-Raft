@@ -153,7 +153,12 @@ func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *S
 		}
 
 		if appendEntryRequest.PrevLogIndex <= len(state.Log) { //implements AE3.
-			state.Log = append(state.Log[:appendEntryRequest.PrevLogIndex], appendEntryRequest.Entries...) //not shifting index because slice ignores upper bound
+			if appendEntryRequest.PrevLogIndex == -1 { //first entry into log
+				state.Log = append([]LogEntry{}, appendEntryRequest.Entries...)
+			} else {
+				state.Log = append(state.Log[:appendEntryRequest.PrevLogIndex], appendEntryRequest.Entries...) //not shifting index because slice ignores upper bound
+			}
+
 			onSuccess()
 			return
 		}
