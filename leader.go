@@ -71,7 +71,7 @@ func runHeartbeatThread(
 	}
 }
 
-//TODO: update commitindex on majority
+
 func readAndDistributeClientRequests(
 	leaderServerState *ServerState,
 	serverLeaderStates *[ClusterSize]ServerTermState,
@@ -80,8 +80,6 @@ func readAndDistributeClientRequests(
 	persister Persister,
 	channel ApplyChannel,
 	) {
-
-	nodesWithReplicatedEntry := 0
 	/* AppendEntriesRequest Handler
 	 * Distributes a client request to all servers in the system.
 	 */
@@ -128,14 +126,12 @@ func readAndDistributeClientRequests(
 						serverLeaderStates, 
 						leaderServerState)
 				}
-				//TODO: Save only when committed
-				err := persister.Save(strconv.Itoa(len(leaderServerState.Log)), clientLogEntry)
+
+				err := persister.Save(strconv.Itoa(leaderServerState.commitIndex), clientLogEntry)
 				for err != nil { //retry until no error.
-					err = persister.Save(strconv.Itoa(len(leaderServerState.Log)), clientLogEntry)
+					err = persister.Save(strconv.Itoa(leaderServerState.commitIndex), clientLogEntry)
 				}
 
-				//leaderServerState.commitIndex++
-				nodesWithReplicatedEntry = 0 //clear count for next client requests
 				go func() { //send when channel is ready
 					channel <- ApplyMessage {
 						term:     leaderServerState.CurrentTerm,
