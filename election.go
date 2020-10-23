@@ -22,16 +22,25 @@ func elect(
 
 	select {
 	case <-electionStartTimer.C: // candidate
-		// lock while transitioning to candidate
+		// implements C1
 		serverStateLock.Lock()
-		state.CurrentTerm++
 		state.Role = CandidateRole
+		state.CurrentTerm++
 		state.VotedFor = state.ServerId // vote for self
 		serverStateLock.Unlock()
 
 		//count votes
 		go requestVotes(state, voteChannels, onWinChannel)
 
+		time.Sleep(time.Duration(timeUntilElectionStart) * time.Millisecond) //reset election timer
+
+		//continue elections until you win or turn into a follower
+		for state.Role == CandidateRole {
+			serverStateLock.Lock()
+			state.CurrentTerm++
+			go requestVotes(state, voteChannels, onWinChannel)
+			serverStateLock.Unlock()
+		}
 
 	/* Response handler for vote requests.
 	 * Note, CurrentTerm is used as a flag to identify if a server has voted.
