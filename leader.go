@@ -94,7 +94,7 @@ func readAndDistributeClientRequests(
 			// get smallest N greater than commitIndex
 			for _, curState := range serverLeaderStates {
 				if curState.matchIndex > leaderServerState.commitIndex {
-					if curState.matchIndex < n {
+					if curState.matchIndex < n || n == 0 {
 						n = curState.matchIndex
 					}
 				}
@@ -109,7 +109,7 @@ func readAndDistributeClientRequests(
 			}
 
 			// on majority of matchIndex >= n, update commitIndex
-			if count > ClusterSize / 2 && leaderServerState.Log[n].Term == leaderServerState.CurrentTerm {
+			if count > ClusterSize / 2 && leaderServerState.Log[n - 1].Term == leaderServerState.CurrentTerm {
 				leaderServerState.commitIndex = n
 			} // end implementation of L4
 
@@ -134,7 +134,7 @@ func readAndDistributeClientRequests(
 					err = persister.Save(strconv.Itoa(len(leaderServerState.Log)), clientLogEntry)
 				}
 
-				leaderServerState.commitIndex++
+				//leaderServerState.commitIndex++
 				nodesWithReplicatedEntry = 0 //clear count for next client requests
 				go func() { //send when channel is ready
 					channel <- ApplyMessage {
@@ -195,14 +195,12 @@ func sendAppendEntriesMessage(
 	curLeaderState := leaderStates[serverIndex]
 
 	if len(leaderServerState.Log) >= curLeaderState.nextIndex {
-		entries := leaderServerState.Log[:curLeaderState.nextIndex]
-		fmt.Println("entries: ", entries)
+		entries := leaderServerState.Log[curLeaderState.nextIndex - 1:]
 		prevLogIndex := curLeaderState.nextIndex-1
 		prevLogTerm := -1
 		if prevLogIndex > 0 && prevLogIndex < len(leaderServerState.Log) {
 			prevLogTerm = leaderServerState.Log[prevLogIndex - 1].Term
 		}
-
 		appendEntriesCom[serverIndex].message <- AppendEntriesMessage {
 			// leader's term
 			leaderServerState.CurrentTerm,

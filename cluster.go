@@ -147,6 +147,7 @@ func onElectionEndHandler(isElection * bool, serverStateLock *sync.Mutex, state 
 
 func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *ServerState, appendEntriesCom *[8]AppendEntriesCom) {
 	onFail := func () {
+		fmt.Println("Server ", state.ServerId, " requesting more log values...")
 		appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, false, appendEntryRequest}
 	}
 
