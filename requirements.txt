@@ -9,7 +9,7 @@ RPC Requirements:
 
     Request Vote (RV):
         (DONE) RV1. Reply false if term < currentTerm
-        RV2. if votedFor is null or candidateId, and candidates log is at least as up-to-date as receiver's log, grant vote
+        (DONE) RV2. if votedFor is null or candidateId, and candidates log is at least as up-to-date as receiver's log, grant vote
             ! Missing check is candidates log is at least as up-to-date
 
 Requirements for Servers :

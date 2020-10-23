@@ -15,6 +15,8 @@ type Vote struct {
 	Term int
 	VoteFor int
 	Responses chan bool
+	LastLogIndex int
+	LastLogTerm int
 }
 
 const UndefinedIndex = -1
