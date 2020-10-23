@@ -71,7 +71,7 @@ func requestVotes(state *ServerState, voteChannels *[ClusterSize]chan Vote, onWi
 	}
 
 	if votes >= ClusterSize/2 { // implements c2.
-		fmt.Print("Server ", state.ServerId, " is the leader!\n\n")
+		fmt.Println("Server ", state.ServerId, " is the leader!\n\n")
 		onWinChannel <- true
 	} else {
 		fmt.Println("Server ", state.ServerId, " lost the election.")
