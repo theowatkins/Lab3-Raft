@@ -18,7 +18,7 @@ type Vote struct {
 
 const UndefinedIndex = -1
 
-func initCluster(clientCommunicationChannel chan KeyValue, persister Persister, applyChannel ApplyChannel) NetworkIdentifiers {
+func initCluster(clientCommunicationChannel chan KeyValue, persister Persister, applyChannel ApplyChannel) {
 
 	var voteChannels [ClusterSize]chan Vote
 	var appendEntriesCom [ClusterSize]AppendEntriesCom
@@ -37,7 +37,6 @@ func initCluster(clientCommunicationChannel chan KeyValue, persister Persister, 
 	for serverIndex := 0; serverIndex < ClusterSize; serverIndex++ {
 		MakeRaft(networkIdentifiers, serverIndex, persister, applyChannel)
 	}
-	return networkIdentifiers
 }
 
 /* Creates a server in the cluster. Structured via https://pdos.csail.mit.edu/6.824/labs/raft-structure.txt
