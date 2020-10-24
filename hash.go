@@ -5,9 +5,9 @@ import (
 	"sort"
 )
 
-const CircleCircumference = 5.0 //choose prime number so that no factors exists.
+const RingCircumference = 5.0 //choose prime number so that no factors exists.
 
-/* A servers position on the circle hash.
+/* A servers position on the ring hash.
  *
  */
 type ServerPosition struct {
@@ -15,7 +15,7 @@ type ServerPosition struct {
 	position float64
 }
 
-/* Encapsulates data to describe gaps in the circle hash.
+/* Encapsulates data to describe gaps in the ring hash.
  *
  */
 type PositionGap struct {
@@ -24,16 +24,16 @@ type PositionGap struct {
 	gap float64
 }
 
-/* The state of circle hash.
+/* The state of ring hash.
  *
  */
-type CircleHash struct {
+type RingHash struct {
 	numberOfServers int
 	virtualNodesPerServer int
 	serverPositions [] ServerPosition
 }
 
-func (ch *CircleHash) New(numberOfServers int, virtualNodesPerServer int) CircleHash {
+func (ch *RingHash) New(numberOfServers int, virtualNodesPerServer int) RingHash {
 	ch.numberOfServers = numberOfServers
 	ch.virtualNodesPerServer = virtualNodesPerServer
 	ch.serverPositions = make([] ServerPosition, 0)
@@ -41,15 +41,15 @@ func (ch *CircleHash) New(numberOfServers int, virtualNodesPerServer int) Circle
 	return *ch
 }
 
-/* Calculates the given key's position in the Circle
+/* Calculates the given key's position in the Ring
  * and returns its clockwise server.
  */
-func (ch *CircleHash) GetAssignedServerForKey(key string) int {
-	keyCirclePosition := getKeyPositionOnCircle(key)
-	return ch.GetAssignedServerForPosition(keyCirclePosition)
+func (ch *RingHash) GetAssignedServerForKey(key string) int {
+	keyRingPosition := getKeyPositionOnRing(key)
+	return ch.GetAssignedServerForPosition(keyRingPosition)
 }
 
-func (ch *CircleHash) GetAssignedServerForPosition(position float64) int {
+func (ch *RingHash) GetAssignedServerForPosition(position float64) int {
 	for _, serverPosition := range ch.serverPositions {
 		if serverPosition.position > position {
 			return serverPosition.serverIndex
@@ -61,7 +61,7 @@ func (ch *CircleHash) GetAssignedServerForPosition(position float64) int {
 /* Adds a server (and virtual counterparts) into the biggests gaps in the ring.
  *
  */
-func (ch *CircleHash) AddNode() {
+func (ch *RingHash) AddNode() {
 	newServerIndex := ch.numberOfServers
 	totalServersToAdd := 1 + ch.virtualNodesPerServer
 	//Add servers to the biggest gaps in the network
@@ -76,8 +76,8 @@ func (ch *CircleHash) AddNode() {
 		nextPosition := ch.serverPositions[nextServerPositionIndex]
 
 		gap := -1.0
-		if nextPosition.position < currentPosition.position { //calculating distance between circle limit
-			firstDistance := CircleCircumference - currentPosition.position
+		if nextPosition.position < currentPosition.position { //calculating distance between ring limit
+			firstDistance := RingCircumference - currentPosition.position
 			secondDistance := nextPosition.position
 			gap = firstDistance + secondDistance
 		} else {
@@ -95,8 +95,8 @@ func (ch *CircleHash) AddNode() {
 	//Add server in middle of biggest gaps
 	for serverCopyIndex := 0; serverCopyIndex < totalServersToAdd; serverCopyIndex++ {
 		newGap := serverGaps[serverCopyIndex]
-		newServerPositionInCircle := math.Mod(newGap.gapStart+(newGap.gap/2), CircleCircumference)
-		newServerPosition := ServerPosition{newServerIndex, newServerPositionInCircle}
+		newServerPositionInRing := math.Mod(newGap.gapStart+(newGap.gap/2), RingCircumference)
+		newServerPosition := ServerPosition{newServerIndex, newServerPositionInRing}
 		ch.serverPositions = append(ch.serverPositions, newServerPosition)
 	}
 
@@ -107,10 +107,10 @@ func (ch *CircleHash) AddNode() {
 	})
 }
 
-/* Removes the last server added to the circle.
+/* Removes the last server added to the ring.
  *
  */
-func (ch *CircleHash) RemoveNode() {
+func (ch *RingHash) RemoveNode() {
 	ch.serverPositions = removeItemsContainingServerIndex(ch.serverPositions, ch.numberOfServers - 1)
 	ch.numberOfServers--
 }
@@ -125,13 +125,13 @@ func removeItemsContainingServerIndex(slice []ServerPosition, serverIndexToRemov
 	return newPositions
 }
 
-func createServerPositions(numberOfServers int, virtualNodesPerServer int, ch *CircleHash) {
+func createServerPositions(numberOfServers int, virtualNodesPerServer int, ch *RingHash) {
 	totalServers := numberOfServers + (numberOfServers * virtualNodesPerServer)
-	spaceBetweenNodes := CircleCircumference / float64(totalServers)
+	spaceBetweenNodes := RingCircumference / float64(totalServers)
 
 	for serverIndex := 0; serverIndex < totalServers; serverIndex++ {
-		positionInCircle := spaceBetweenNodes * float64(serverIndex+1)
-		serverPosition := ServerPosition{serverIndex % numberOfServers, positionInCircle}
+		positionInRing := spaceBetweenNodes * float64(serverIndex+1)
+		serverPosition := ServerPosition{serverIndex % numberOfServers, positionInRing}
 		ch.serverPositions = append(ch.serverPositions, serverPosition)
 	}
 
@@ -140,14 +140,14 @@ func createServerPositions(numberOfServers int, virtualNodesPerServer int, ch *C
 	})
 }
 
-/* Adds the ascii characters values in given key and finds its position in the circle
- * by taking the remainder after dividing by CircleCircumference. Note, because we are
- * always dividing an integer the CircleCircumference cannot be 1.
+/* Adds the ascii characters values in given key and finds its position in the ring
+ * by taking the remainder after dividing by RingCircumference. Note, because we are
+ * always dividing an integer the RingCircumference cannot be 1.
  */
-func getKeyPositionOnCircle(key string) float64 {
+func getKeyPositionOnRing(key string) float64 {
 	hash := getKeyHash(key)
-	locationOnCircle := math.Mod(float64(hash), CircleCircumference) //Notes,
-	return locationOnCircle
+	positionOnRing := math.Mod(float64(hash), RingCircumference) //Notes,
+	return positionOnRing
 }
 
 func getKeyHash(key string) int {

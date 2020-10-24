@@ -10,13 +10,13 @@ import (
  *
  */
 type Database struct {
-	ch *CircleHash
+	ch *RingHash
 	servers * []DatabaseServer
 }
 const numberOfReplicas = 2
 
 func (db * Database) New (numberOfNodes int) {
-	ch := new(CircleHash)
+	ch := new(RingHash)
 	numberVirtualNodesPerServer := 1
 
 	ch.New(numberOfNodes, numberVirtualNodesPerServer)
@@ -34,26 +34,26 @@ func (db * Database) New (numberOfNodes int) {
 	db.servers = &servers
 }
 
-func (db * Database) AddNode() {
+func (db * Database) AddNode() { //implements CH1
 	db.ch.AddNode()
 }
 
-func (db * Database) DeleteNode() {
+func (db * Database) DeleteNode() { //implements CH3
 	db.ch.RemoveNode()
 }
 
-func (db * Database) Get(key string) int {
+func (db * Database) Get(key string) int { //implements CH4
 	return db.ch.GetAssignedServerForKey(key)
 }
 
-func (db * Database) Put(key string, value string)  {
-	originalPosition := getKeyPositionOnCircle(key)
+func (db * Database) Put(key string, value string)  { //implements CH4
+	originalPosition := getKeyPositionOnRing(key)
 	serversToSendTo := []int{}
 	numberOfCopies := numberOfReplicas + 1
-	copyCircleDelta := CircleCircumference / float64(numberOfCopies)
+	copyRingDelta := RingCircumference / float64(numberOfCopies)
 	for copyIndex := 0; copyIndex < numberOfCopies; copyIndex++ {
-		copyPosition := originalPosition + (float64(copyIndex) * copyCircleDelta)
-		copyPosition = math.Mod(copyPosition, CircleCircumference)
+		copyPosition := originalPosition + (float64(copyIndex) * copyRingDelta)
+		copyPosition = math.Mod(copyPosition, RingCircumference)
 		copyAssignedServer := db.ch.GetAssignedServerForPosition(copyPosition)
 		serversToSendTo = append(serversToSendTo, copyAssignedServer)
 	}
