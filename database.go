@@ -5,18 +5,27 @@ import (
 	"math"
 )
 
-/* Consistent Hashing Design Decisions
- * 1. Server Identifiers are just int that represent
- *
+/* Note, although intended to be built on top of raft we faced
+ * difficulties doing so because our raft implementation was not
+ * designed to be able to add and delete nodes on the fly. This will
+ * taken into consideration at a later time. Nonetheless, consistent
+ * hashing is implemented using dummy services.
  */
+
+type DatabaseLogEntry struct {
+	serverId int
+	entry KeyValue
+}
+
 type Database struct {
-	ch *CircleHash
+	ch *RingHash
 	servers * []DatabaseServer
+	log []DatabaseLogEntry
 }
 const numberOfReplicas = 2
 
 func (db * Database) New (numberOfNodes int) {
-	ch := new(CircleHash)
+	ch := new(RingHash)
 	numberVirtualNodesPerServer := 1
 
 	ch.New(numberOfNodes, numberVirtualNodesPerServer)
@@ -34,26 +43,26 @@ func (db * Database) New (numberOfNodes int) {
 	db.servers = &servers
 }
 
-func (db * Database) AddNode() {
+func (db * Database) AddNode() { //implements CH1
 	db.ch.AddNode()
 }
 
-func (db * Database) DeleteNode() {
+func (db * Database) DeleteNode() { //implements CH3
 	db.ch.RemoveNode()
 }
 
-func (db * Database) Get(key string) int {
+func (db * Database) Get(key string) int { //implements CH4
 	return db.ch.GetAssignedServerForKey(key)
 }
 
-func (db * Database) Put(key string, value string)  {
-	originalPosition := getKeyPositionOnCircle(key)
+func (db * Database) Put(key string, value string)  { //implements CH4
+	originalPosition := getKeyPositionOnRing(key)
 	serversToSendTo := []int{}
 	numberOfCopies := numberOfReplicas + 1
-	copyCircleDelta := CircleCircumference / float64(numberOfCopies)
+	copyRingDelta := RingCircumference / float64(numberOfCopies)
 	for copyIndex := 0; copyIndex < numberOfCopies; copyIndex++ {
-		copyPosition := originalPosition + (float64(copyIndex) * copyCircleDelta)
-		copyPosition = math.Mod(copyPosition, CircleCircumference)
+		copyPosition := originalPosition + (float64(copyIndex) * copyRingDelta)
+		copyPosition = math.Mod(copyPosition, RingCircumference)
 		copyAssignedServer := db.ch.GetAssignedServerForPosition(copyPosition)
 		serversToSendTo = append(serversToSendTo, copyAssignedServer)
 	}
@@ -61,6 +70,7 @@ func (db * Database) Put(key string, value string)  {
 	data := KeyValue{key, value}
 	for _, serverIndex := range serversToSendTo {
 		(*db.servers)[serverIndex].communicationChannel <- data
+		db.log = append(db.log, DatabaseLogEntry{serverIndex, data})
 	}
 }
 
