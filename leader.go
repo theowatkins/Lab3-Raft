@@ -127,7 +127,7 @@ func readAndDistributeClientRequests(
 						leaderServerState)
 				}
 
-				err := persister.Save(strconv.Itoa(leaderServerState.commitIndex), clientLogEntry)
+				err := persister.Save(strconv.Itoa(leaderServerState.commitIndex), clientLogEntry) //implements P1.
 				for err != nil { //retry until no error.
 					err = persister.Save(strconv.Itoa(leaderServerState.commitIndex), clientLogEntry)
 				}

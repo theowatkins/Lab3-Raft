@@ -47,10 +47,10 @@ type NetworkIdentifiers struct {
 func MakeRaft(
 	peers NetworkIdentifiers,
 	meIndex int,
-	persister Persister,
+	persister Persister, //implements P2
 	applyChannel ApplyChannel) Raft {
 
-	previousLogEntries := initializeServerStateFromPersister(persister)
+	previousLogEntries := initializeServerStateFromPersister(persister) //implements P1 + P3.
 	lastCommittedIndex := len(previousLogEntries)
 	currentTerm := 0
 
