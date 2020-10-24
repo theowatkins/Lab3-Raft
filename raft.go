@@ -63,9 +63,9 @@ func MakeRaft(
 		currentTerm,
 		-1,
 		previousLogEntries,
-	FollowerRole,
-	lastCommittedIndex,
-	lastCommittedIndex}
+		FollowerRole,
+		lastCommittedIndex,
+		lastCommittedIndex}
 
 	return startServer(
 		&raftState,

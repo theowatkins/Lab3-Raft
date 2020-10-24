@@ -11,14 +11,6 @@ const ClusterSize = 8
 const ElectionTimeOut = 5 * 1000 // in milliseconds
 var debug = false
 
-type Vote struct {
-	Term int
-	VoteFor int
-	Responses chan bool
-	LastLogIndex int
-	LastLogTerm int
-}
-
 const UndefinedIndex = -1
 
 func initCluster(clientCommunicationChannel chan KeyValue, persister Persister, applyChannel ApplyChannel) {
@@ -94,7 +86,7 @@ func runElectionTimeoutThread(
 	for {
 		timeElapsed := time.Now().Sub(*timeSinceLastUpdate)
 		if timeElapsed.Milliseconds() > ElectionTimeOut { //implements C4.
-			*isElection = true
+			*isElection = true // restarts election
 		}
 
 		if *isElection {
@@ -123,9 +115,8 @@ func startLeaderListener(
 		case appendEntryRequest := <-appendEntriesCom[state.ServerId].message:
 			if appendEntryRequest.Term >= state.CurrentTerm {
 				*timeSinceLastUpdate = time.Now()
-				state.CurrentTerm = appendEntryRequest.Term //implements AS2.
 				if *isElection { //received message from leader during election,
-					onElectionEndHandler(isElection, serverStateLock, state)
+					*isElection = false
 				}
 				
 				printMessageFromLeader(state.ServerId, appendEntryRequest)
@@ -138,13 +129,10 @@ func startLeaderListener(
 	}
 }
 
-func onElectionEndHandler(isElection * bool, serverStateLock *sync.Mutex, state *ServerState) {
-	*isElection = false
-	serverStateLock.Lock()
-	if state.Role != LeaderRole {
-		state.Role = FollowerRole // for candidates that lost the election
-	}
-	serverStateLock.Unlock()
+func staleTerm(state *ServerState, newTerm int) {
+	//implements AS2.
+	state.Role = FollowerRole 
+	state.CurrentTerm = newTerm //implements AS2.
 }
 
 func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *ServerState, appendEntriesCom *[8]AppendEntriesCom) {
@@ -157,28 +145,28 @@ func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *S
 		appendEntriesCom[state.ServerId].response <- AppendEntriesResponse{state.CurrentTerm, true, appendEntryRequest}
 	}
 
-	if appendEntryRequest.LeaderCommit > state.commitIndex { //implements AE5.
-		state.commitIndex = Min(appendEntryRequest.LeaderCommit, len(state.Log))
-	}
-
-	var termCompare int
-	if appendEntryRequest.PrevLogIndex == 0 {
-		termCompare = -1
-	} else {
+	termCompare := -1
+	if appendEntryRequest.PrevLogIndex != 0 && 
+		appendEntryRequest.PrevLogIndex <= len(state.Log) {
+			
 		termCompare = state.Log[appendEntryRequest.PrevLogIndex - 1].Term
 	}
 
-	if state.CurrentTerm < appendEntryRequest.Term { //implements AE1.
+	if state.CurrentTerm < appendEntryRequest.Term { //implements AS2
+		staleTerm(state, appendEntryRequest.Term)
+	}
+
+	if state.CurrentTerm > appendEntryRequest.Term { //implements AE1
 		onFail()
-		return
-	} else if appendEntryRequest.PrevLogIndex <= len(state.Log) && appendEntryRequest.PrevLogTerm == termCompare { //implements AE3.
-		state.Log = append(state.Log[:appendEntryRequest.PrevLogIndex], appendEntryRequest.Entries...) //not shifting index because slice ignores upper bound
+	} else if appendEntryRequest.PrevLogTerm != termCompare { //implements AE2.
+		onFail()
+	} else { //implements AE3-4
+		state.Log = append(state.Log[:appendEntryRequest.PrevLogIndex], appendEntryRequest.Entries...)
 		onSuccess()
-		return
-	} else { //implements AE2.
-		// respond to leader, append failed (need more entries)
-		onFail()
-		return
+	}
+
+	if appendEntryRequest.LeaderCommit > state.commitIndex { //implements AE5.
+		state.commitIndex = Min(appendEntryRequest.LeaderCommit, len(state.Log))
 	}
 }
 

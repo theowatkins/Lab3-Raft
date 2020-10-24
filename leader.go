@@ -21,7 +21,7 @@ func onWinChannelListener(
 	persister Persister,
 	channel ApplyChannel,
 	) {
-	//TODO: What if received message from new leader before onWinChannel gets to hear about it?
+
 	for {
 		select {
 		case <-* onWinChannel: // got enough votes
@@ -117,7 +117,6 @@ func readAndDistributeClientRequests(
 				clientLogEntry := LogEntry{leaderServerState.CurrentTerm, clientRequest}
 
 				leaderServerState.Log = append(leaderServerState.Log, clientLogEntry)
-				leaderServerState.lastApplied++
 				
 				for serverIndex, _ := range *appendEntriesCom {
 					go sendAppendEntriesMessage(
@@ -153,23 +152,27 @@ func readAndDistributeClientRequests(
 				for leaderServerState.Role == LeaderRole {
 					select {
 					case r := <-serverAppendEntriesCom.response:
-						if r.success {
-							// implements L3
-							curMatchIndex := r.message.PrevLogIndex + len(r.message.Entries)
-							serverLeaderStates[serverIndex].matchIndex = curMatchIndex
-							serverLeaderStates[serverIndex].nextIndex = curMatchIndex + 1
+						if r.term > leaderServerState.CurrentTerm {
+							staleTerm(leaderServerState, r.term)
 						} else {
-							fmt.Println("Server ", serverIndex, " had error processing AppendEntries request: ", r.message)
-							// resend message with more logEntries on failure
-							if serverLeaderStates[serverIndex].nextIndex > 1 {
-								serverLeaderStates[serverIndex].nextIndex -= 1 //
-							}
+							if r.success {
+								// implements L3
+								curMatchIndex := r.message.PrevLogIndex + len(r.message.Entries)
+								serverLeaderStates[serverIndex].matchIndex = curMatchIndex
+								serverLeaderStates[serverIndex].nextIndex = curMatchIndex + 1
+							} else {
+								fmt.Println("Server ", serverIndex, " had error processing AppendEntries request: ", r.message)
+								// resend message with more logEntries on failure
+								if serverLeaderStates[serverIndex].nextIndex > 1 {
+									serverLeaderStates[serverIndex].nextIndex -= 1 //
+								}
 
-							go sendAppendEntriesMessage(
-								serverIndex,
-								appendEntriesCom, 
-								serverLeaderStates, 
-								leaderServerState)
+								go sendAppendEntriesMessage(
+									serverIndex,
+									appendEntriesCom, 
+									serverLeaderStates, 
+									leaderServerState)
+							}
 						}
 					}
 				}
@@ -187,10 +190,9 @@ func sendAppendEntriesMessage(
 	leaderStates *[ClusterSize]ServerTermState,
 	leaderServerState * ServerState) {
 	
-	// implements L3
 	curLeaderState := leaderStates[serverIndex]
 
-	if len(leaderServerState.Log) >= curLeaderState.nextIndex {
+	if len(leaderServerState.Log) >= curLeaderState.nextIndex {// implements L3
 		entries := leaderServerState.Log[curLeaderState.nextIndex - 1:]
 		prevLogIndex := curLeaderState.nextIndex-1
 		prevLogTerm := -1
