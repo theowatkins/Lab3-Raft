@@ -106,7 +106,6 @@ func requestVotes(state *ServerState, voteChannels *[ClusterSize]chan Vote, onWi
 				staleTerm(state, r.Term)
 				break
 			}
-
 			if r.GotVote  {
 				votes++
 				if votes >= ClusterSize/2 { // implements c2.
