@@ -75,9 +75,10 @@ C4, (cluster.go, 88)
 ## Leaders (L):
 
 L1, (leader.go, 39)
-L2, (leader.go, 118)
-L3,(leader.go, 193)
-L4, (leader.go, 88-124)
+L2, (leader.go, 112-122)
+L3,(leader.go, 171-183)
+L4, (leader.go, 85-125)
+
 
 ## Persistent State Requirements:
 

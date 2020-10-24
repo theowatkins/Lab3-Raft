@@ -102,7 +102,7 @@ func requestVotes(state *ServerState, voteChannels *[ClusterSize]chan Vote, onWi
 		votes := 0
 		for j := 0; j < (ClusterSize - 1); j++ {
 			r := <-responses
-			if r.Term > state.CurrentTerm {
+			if r.Term > state.CurrentTerm { // implements AS2
 				staleTerm(state, r.Term)
 				break
 			}

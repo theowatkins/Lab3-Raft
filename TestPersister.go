@@ -44,7 +44,7 @@ func (t TestPersister) Load(loadFunc LoadFunc) error {
 	for logEntryIndex, logEntry := range loadedLogEntries {
 		loadFunc(strconv.Itoa(logEntryIndex), logEntry)
 	}
-	fmt.Println("Loaded ", len(*t.inMemoryLog), " many entries from persistent state.")
+	//fmt.Println("Loaded ", len(*t.inMemoryLog), " many entries from persistent state.")
 	return nil
 }
 
