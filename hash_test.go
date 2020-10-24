@@ -8,7 +8,7 @@ import (
 )
 
 func TestInitialization(t *testing.T) {
-	ch := new(CircleHash)
+	ch := new(RingHash)
 	numberOfServers := 1
 	numberVirtualNodesPerServer := 1
 	ch.New(numberOfServers, numberVirtualNodesPerServer)
@@ -16,12 +16,12 @@ func TestInitialization(t *testing.T) {
 	assertEqualInt(numberOfServers, ch.numberOfServers,"numberOfServers", t)
 	assertEqualInt(numberVirtualNodesPerServer, ch.virtualNodesPerServer,"numberVirtualNodesPerServer", t)
 
-	expectedPositions := []float64{.5 * CircleCircumference, CircleCircumference}
+	expectedPositions := []float64{.5 * RingCircumference, RingCircumference}
 	testPositions(expectedPositions, ch, t)
 }
 
 func TestAddNode(t *testing.T) {
-	ch := new(CircleHash)
+	ch := new(RingHash)
 	numberOfServers := 1
 	numberVirtualNodesPerServer := 1
 	numberServerPositions := 4
@@ -33,15 +33,15 @@ func TestAddNode(t *testing.T) {
 	assertEqualInt(numberServerPositions, len(ch.serverPositions), "numberServerPositions", t)
 
 	expectedPositions := []float64{
-		.25 * CircleCircumference,
-		.5  * CircleCircumference,
-		.75 * CircleCircumference,
-		CircleCircumference}
+		.25 * RingCircumference,
+		.5  * RingCircumference,
+		.75 * RingCircumference,
+		RingCircumference}
 	testPositions(expectedPositions, ch, t)
 }
 
 func TestAddNodeTwice(t *testing.T) {
-	ch := new(CircleHash)
+	ch := new(RingHash)
 	numberOfServers := 1
 	numberVirtualNodesPerServer := 1
 	numberServerPositions := 6
@@ -55,12 +55,12 @@ func TestAddNodeTwice(t *testing.T) {
 	assertEqualInt(numberServerPositions, len(ch.serverPositions), "numberServerPositions", t)
 
 	expectedPositions := []float64{
-		.25 * CircleCircumference, // 1/8th of circumference
-		.375 * CircleCircumference, //.375 * Circ
-		.5 * CircleCircumference,
-		.625 * CircleCircumference,
-		.75 * CircleCircumference,
-		CircleCircumference}
+		.25 * RingCircumference,  // 1/8th of circumference
+		.375 * RingCircumference, //.375 * Circ
+		.5 * RingCircumference,
+		.625 * RingCircumference,
+		.75 * RingCircumference,
+		RingCircumference}
 	testPositions(expectedPositions, ch, t)
 
 	expectedServerPositions := []int{1, 2, 0, 2, 1, 0}
@@ -68,7 +68,7 @@ func TestAddNodeTwice(t *testing.T) {
 }
 
 func TestAddNodeTwiceThenRemove(t *testing.T) {
-	ch := new(CircleHash)
+	ch := new(RingHash)
 	numberOfServers := 1
 	numberVirtualNodesPerServer := 1
 
@@ -78,10 +78,10 @@ func TestAddNodeTwiceThenRemove(t *testing.T) {
 	ch.RemoveNode()
 
 	expectedPositions := []float64{
-		.25 * CircleCircumference, // 1/8th of circumference
-		.5 * CircleCircumference,
-		.75 * CircleCircumference,
-		CircleCircumference}
+		.25 * RingCircumference, // 1/8th of circumference
+		.5 * RingCircumference,
+		.75 * RingCircumference,
+		RingCircumference}
 	testPositions(expectedPositions, ch, t)
 
 	expectedServerPositions := []int{1,  0,  1, 0}
@@ -89,7 +89,7 @@ func TestAddNodeTwiceThenRemove(t *testing.T) {
 }
 
 func TestGetServerWithPosition(t *testing.T) {
-	ch := new(CircleHash)
+	ch := new(RingHash)
 	ch.New(1, 1)
 	ch.AddNode()
 	ch.AddNode()
@@ -98,12 +98,12 @@ func TestGetServerWithPosition(t *testing.T) {
 	assertEqualInt(1, assignedServer, "GetServerWithPosition - clockwise search", t)
 	assignedServer = ch.GetAssignedServerForPosition(5) //server exists at 5
 	assertEqualInt(0, assignedServer, "GetServerWithPosition - clockwise search", t)
-	assignedServer = ch.GetAssignedServerForPosition(.375 * CircleCircumference) //athough exact match with 2 captured group goes clockwise
+	assignedServer = ch.GetAssignedServerForPosition(.375 * RingCircumference) //athough exact match with 2 captured group goes clockwise
 	assertEqualInt(0, assignedServer, "GetServerWithPosition - exact match", t)
 }
 
 func TestGetServerWithKey(t *testing.T) {
-	ch := new(CircleHash)
+	ch := new(RingHash)
 	ch.New(1, 1)
 	ch.AddNode()
 	ch.AddNode()
@@ -132,7 +132,7 @@ func TestDatabasePut(t *testing.T) {
  *
  */
 
-func testPositions(expected []float64, ch *CircleHash, t *testing.T){
+func testPositions(expected []float64, ch *RingHash, t *testing.T){
 	for positionIndex := 0; positionIndex < len(expected); positionIndex++ {
 		runIdentifiers := fmt.Sprintf("pos%d", positionIndex)
 		position := ch.serverPositions[positionIndex].position
@@ -140,7 +140,7 @@ func testPositions(expected []float64, ch *CircleHash, t *testing.T){
 	}
 }
 
-func testServerPositions(expected []int, ch *CircleHash, t *testing.T){
+func testServerPositions(expected []int, ch *RingHash, t *testing.T){
 	for positionIndex := 0; positionIndex < len(expected); positionIndex++ {
 		runIdentifiers := fmt.Sprintf("pos%d", positionIndex)
 		serverAtPosition := ch.serverPositions[positionIndex].serverIndex

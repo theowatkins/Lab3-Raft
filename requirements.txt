@@ -36,7 +36,7 @@ Requirements for Servers :
 
 Persistent State Requirements:
     (DONE) P1. save and restore persistent state from a Persister object (see persister.go)
-    (DONE) Whoever calls Raft.Make() supplies a Persister that initially holds Raft's most recently persisted state (if any)
+    (DONE) P2. Whoever calls Raft.Make() supplies a Persister that initially holds Raft's most recently persisted state (if any)
     (DONE) P3. Raft should initialize its state from that Persister, and should use it to save its persistent state each
 
 
