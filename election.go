@@ -102,13 +102,13 @@ func requestVotes(state *ServerState, voteChannels *[ClusterSize]chan Vote, onWi
 		votes := 0
 		for j := 0; j < (ClusterSize - 1); j++ {
 			r := <-responses
-			if r.Term > state.CurrentTerm {
+			if r.Term > state.CurrentTerm { // implements AS2
 				staleTerm(state, r.Term)
 				break
 			}
 			if r.GotVote  {
 				votes++
-				if votes >= ClusterSize/2 { // implements c2.
+				if votes >= ClusterSize/2 { // implements C2
 					fmt.Println("Server ", state.ServerId, " is the leader!\n\n")
 					onWinChannel <- true
 					break
