@@ -132,7 +132,7 @@ func startLeaderListener(
 func staleTerm(state *ServerState, newTerm int) {
 	//implements AS2.
 	state.Role = FollowerRole 
-	state.CurrentTerm = newTerm //implements AS2.
+	state.CurrentTerm = newTerm
 }
 
 func processAppendEntryRequest(appendEntryRequest AppendEntriesMessage, state *ServerState, appendEntriesCom *[8]AppendEntriesCom) {

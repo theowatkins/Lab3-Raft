@@ -80,9 +80,8 @@ func readAndDistributeClientRequests(
 	persister Persister,
 	channel ApplyChannel,
 	) {
-	/* AppendEntriesRequest Handler
-	 * Distributes a client request to all servers in the system.
-	 */
+	
+	
 	go func () {
 		for leaderServerState.Role == LeaderRole {
 			// implements L4
@@ -109,7 +108,28 @@ func readAndDistributeClientRequests(
 			// on majority of matchIndex >= n, update commitIndex
 			if count > ClusterSize / 2 && leaderServerState.Log[n - 1].Term == leaderServerState.CurrentTerm {
 				leaderServerState.commitIndex = n
+
+				err := persister.Save(strconv.Itoa(leaderServerState.commitIndex), leaderServerState.Log[n - 1])
+				for err != nil { //retry until no error.
+					err = persister.Save(strconv.Itoa(leaderServerState.commitIndex), leaderServerState.Log[n - 1])
+				}
+
+				go func() { //send when channel is ready
+					channel <- ApplyMessage {
+						term:     leaderServerState.CurrentTerm,
+						logEntry: leaderServerState.Log[n - 1],
+					}
+				}()
 			} // end implementation of L4
+		}
+	}()
+
+	/* AppendEntriesRequest Handler
+	 * Distributes a client request to all servers in the system.
+	 */
+	go func () {
+		for leaderServerState.Role == LeaderRole {
+			
 
 			select {
 			case clientRequest := <-*clientCommunicationChannel:
@@ -125,18 +145,6 @@ func readAndDistributeClientRequests(
 						serverLeaderStates, 
 						leaderServerState)
 				}
-
-				err := persister.Save(strconv.Itoa(leaderServerState.commitIndex), clientLogEntry) //implements P1.
-				for err != nil { //retry until no error.
-					err = persister.Save(strconv.Itoa(leaderServerState.commitIndex), clientLogEntry)
-				}
-
-				go func() { //send when channel is ready
-					channel <- ApplyMessage {
-						term:     leaderServerState.CurrentTerm,
-						logEntry: clientLogEntry,
-					}
-				}()
 			}
 		}
 	}()
@@ -152,7 +160,7 @@ func readAndDistributeClientRequests(
 				for leaderServerState.Role == LeaderRole {
 					select {
 					case r := <-serverAppendEntriesCom.response:
-						if r.term > leaderServerState.CurrentTerm {
+						if r.term > leaderServerState.CurrentTerm { //implements AS2
 							staleTerm(leaderServerState, r.term)
 						} else {
 							if r.success {
@@ -180,8 +188,6 @@ func readAndDistributeClientRequests(
 			}()
 		}
 	}()
-
-	fmt.Println("Client listeners where launched successfully.")
 }
 
 func sendAppendEntriesMessage(
