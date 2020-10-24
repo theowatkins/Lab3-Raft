@@ -1,6 +1,4 @@
 
-AppendEntries (AE):
-
 RPC Requirements:
     AppendEntries (AE):
         (DONE) AE1. Reply false if term < currentTerm
